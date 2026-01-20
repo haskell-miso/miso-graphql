@@ -1,0 +1,66 @@
+cabal-version: 3.0
+name: miso-graphql
+version: 0.1.0.0
+synopsis: Miso-flavoured GraphQL
+homepage: https://github.com/haskell-miso/miso-graphql
+license: Apache-2.0
+author: ners
+maintainer: ners@gmx.ch
+bug-reports: https://github.com/haskell-miso/miso-graphql/issues
+category: System
+build-type: Simple
+extra-source-files:
+  README.md
+
+source-repository head
+  type: git
+  location: https://github.com/haskell-miso/miso-graphql
+
+common common
+  default-language: GHC2021
+  ghc-options:
+    -Weverything
+    -Wno-unsafe
+    -Wno-all-missed-specialisations
+    -Wno-missing-export-lists
+    -Wno-missing-import-lists
+    -Wno-missing-kind-signatures
+    -Wno-missing-poly-kind-signatures
+    -Wno-missing-role-annotations
+    -Wno-missing-safe-haskell-mode
+    -Wno-name-shadowing
+
+  default-extensions:
+    ApplicativeDo
+    BlockArguments
+    DataKinds
+    DefaultSignatures
+    DeriveAnyClass
+    DeriveGeneric
+    DerivingStrategies
+    DerivingVia
+    ExplicitNamespaces
+    LambdaCase
+    NoImplicitPrelude
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    RecordWildCards
+    RecursiveDo
+    TemplateHaskell
+    TypeFamilies
+    ViewPatterns
+
+library
+  import: common
+  hs-source-dirs: src
+  build-depends:
+    base,
+    containers,
+    miso,
+    template-haskell,
+
+  exposed-modules:
+    Miso.GraphQL.AST
+    Miso.GraphQL.Lexer
+    Miso.GraphQL.Parser
