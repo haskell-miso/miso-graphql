@@ -1,5 +1,6 @@
 module Miso.GraphQL.AST where
 
+import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 import Miso.Prelude
 
@@ -13,7 +14,7 @@ data ExecutableDirectiveLocation
     | FRAGMENT_SPREAD
     | INLINE_FRAGMENT
     | VARIABLE_DEFINITION
-    deriving stock (Show, Eq, Generic, Enum)
+    deriving stock (Show, Eq, Generic, Bounded, Enum)
 
 -- | https://spec.graphql.org/draft/#TypeSystemDirectiveLocation
 data TypeSystemDirectiveLocation
@@ -28,15 +29,7 @@ data TypeSystemDirectiveLocation
     | ENUM_VALUE
     | INPUT_OBJECT
     | INPUT_FIELD_DEFINITION
-    deriving stock (Show, Eq, Generic, Enum)
-
-data Error
-    = ConversionError MisoString MisoString
-    | LexerError MisoString
-    | NoMatch MisoString
-    | UntermBlockString
-    | UntermString
-    deriving stock (Show, Eq, Generic)
+    deriving stock (Show, Eq, Generic, Bounded, Enum)
 
 -- | https://spec.graphql.org/draft/#StringValue
 data StringValue
@@ -46,7 +39,7 @@ data StringValue
 
 -- | A GraphQL 'Document'
 -- https://spec.graphql.org/draft/#Document
-newtype Document = Document [Definition]
+newtype Document = Document (NonEmpty Definition)
     deriving stock (Show, Eq, Generic)
 
 -- | A GraphQL 'Definition'
@@ -83,11 +76,11 @@ data OperationType
     = Query
     | Mutation
     | Subscription
-    deriving stock (Show, Eq, Generic, Enum)
+    deriving stock (Show, Eq, Ord, Generic, Bounded, Enum)
 
 -- | A GraphQL 'SelectionSet'
 -- https://spec.graphql.org/draft/#SelectionSet
-type SelectionSet = [Selection]
+type SelectionSet = (NonEmpty Selection)
 
 -- | A GraphQL 'Selection' type
 -- https://spec.graphql.org/draft/#Selection
@@ -115,12 +108,15 @@ newtype Alias = Alias Name
 
 -- | GraphQL 'Arguments'
 -- https://spec.graphql.org/draft/#Arguments
-type Arguments = [Argument]
+type Arguments = (NonEmpty Argument)
 
 -- | A GraphQL 'Argument'
 -- https://spec.graphql.org/draft/#Arguments
 data Argument = Argument Name Value
     deriving stock (Show, Eq, Generic)
+
+argumentName :: Argument -> Name
+argumentName (Argument name _) = name
 
 -- | GraphQL 'FragmentSpread' type
 -- https://spec.graphql.org/draft/#FragmentSpread
@@ -176,14 +172,20 @@ newtype EnumValue = EnumValue Name
     deriving stock (Generic)
     deriving newtype (Show, Eq, Monoid, Semigroup)
 
+enumValueName :: EnumValue -> Name
+enumValueName (EnumValue name) = name
+
 -- | A GraphQL 'ObjectField'
 -- https://spec.graphql.org/draft/#ObjectField
 data ObjectField = ObjectField Name Value
     deriving stock (Show, Eq, Generic)
 
+objectFieldName :: ObjectField -> Name
+objectFieldName (ObjectField name _) = name
+
 -- | GraphQL 'VariablesDefinition'
 -- https://spec.graphql.org/draft/#VariablesDefinition
-type VariablesDefinition = [VariableDefinition]
+type VariablesDefinition = (NonEmpty VariableDefinition)
 
 -- | A GraphQL 'VariableDefinition'
 -- https://spec.graphql.org/draft/#VariableDefinition
@@ -196,11 +198,17 @@ data VariableDefinition
         (Maybe Directives)
     deriving stock (Show, Eq, Generic)
 
+variableDefinitionName :: VariableDefinition -> Name
+variableDefinitionName (VariableDefinition _ var _ _ _) = variableName var
+
 -- | A GraphQL 'Variable'
 -- https://spec.graphql.org/draft/#Variable
 newtype Variable = Variable Name
     deriving stock (Generic)
     deriving newtype (Show, Eq, Monoid, Semigroup)
+
+variableName :: Variable -> Name
+variableName (Variable name) = name
 
 -- | A GraphQL 'DefaultValue'
 -- https://spec.graphql.org/draft/#DefaultValue
@@ -221,6 +229,9 @@ newtype NamedType = NamedType Name
     deriving stock (Generic)
     deriving newtype (Show, Eq, Monoid, Semigroup)
 
+namedTypeName :: NamedType -> Name
+namedTypeName (NamedType name) = name
+
 -- | A GraphQL 'ListType'
 -- https://spec.graphql.org/draft/#ListType
 newtype ListType = ListType Type
@@ -235,7 +246,7 @@ data NonNullType
 
 -- | The GraphQL 'Directives' type
 -- https://spec.graphql.org/draft/#Directives
-type Directives = [Directive]
+type Directives = (NonEmpty Directive)
 
 -- | A GraphQL 'Directive'
 -- https://spec.graphql.org/draft/#Directive
@@ -273,12 +284,15 @@ data SchemaExtension
     deriving stock (Show, Eq, Generic)
 
 -- | List of 'RootOperationTypeDefinition'
-type RootOperationTypeDefinitions = [RootOperationTypeDefinition]
+type RootOperationTypeDefinitions = (NonEmpty RootOperationTypeDefinition)
 
 -- | https://spec.graphql.org/draft/#RootOperationTypeDefinition
 data RootOperationTypeDefinition
     = RootOperationTypeDefinition OperationType NamedType
     deriving stock (Show, Eq, Generic)
+
+rootOperationType :: RootOperationTypeDefinition -> OperationType
+rootOperationType (RootOperationTypeDefinition operationType _) = operationType
 
 -- | A GraphQL 'Description'
 -- https://spec.graphql.org/draft/#Description
@@ -341,13 +355,15 @@ data ObjectTypeExtension
 
 -- | A GraphQL 'ImplementsInterfaces'
 -- https://spec.graphql.org/draft/#ImplementsInterfaces
-newtype ImplementsInterfaces = ImplementsInterfaces [NamedType]
-    deriving stock (Show, Eq, Generic)
+newtype ImplementsInterfaces = ImplementsInterfaces (NonEmpty NamedType)
+    deriving stock (Generic)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | A GraphQL 'FieldsDefinition'
 -- https://spec.graphql.org/draft/#FieldsDefinitionn
-newtype FieldsDefinition = FieldsDefinition [FieldDefinition]
-    deriving stock (Show, Eq, Generic)
+newtype FieldsDefinition = FieldsDefinition (NonEmpty FieldDefinition)
+    deriving stock (Generic)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | A GraphQL 'FieldDefinition'
 -- https://spec.graphql.org/draft/#FieldDefinition
@@ -360,9 +376,13 @@ data FieldDefinition
         (Maybe Directives)
     deriving stock (Show, Eq, Generic)
 
+fieldDefinitionName :: FieldDefinition -> Name
+fieldDefinitionName (FieldDefinition _ name _ _ _) = name
+
 -- | https://spec.graphql.org/draft/#ArgumentsDefinition
-newtype ArgumentsDefinition = ArgumentsDefinition [InputValueDefinition]
-    deriving stock (Show, Eq, Generic)
+newtype ArgumentsDefinition = ArgumentsDefinition (NonEmpty InputValueDefinition)
+    deriving stock (Generic)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | https://spec.graphql.org/draft/#InputValueDefinition
 data InputValueDefinition
@@ -373,6 +393,9 @@ data InputValueDefinition
         (Maybe DefaultValue)
         (Maybe Directives)
     deriving stock (Show, Eq, Generic)
+
+inputValueDefinitionName :: InputValueDefinition -> Name
+inputValueDefinitionName (InputValueDefinition _ name _ _ _) = name
 
 -- | https://spec.graphql.org/draft/#InterfaceTypeDefinition
 data InterfaceTypeDefinition
@@ -403,9 +426,9 @@ data UnionTypeDefinition
     deriving stock (Show, Eq, Generic)
 
 -- | https://spec.graphql.org/draft/#UnionMemberTypes
-newtype UnionMemberTypes = UnionMemberTypes [NamedType]
+newtype UnionMemberTypes = UnionMemberTypes (NonEmpty NamedType)
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | https://spec.graphql.org/draft/#UnionTypeExtension
 data UnionTypeExtension
@@ -422,13 +445,17 @@ data EnumTypeDefinition
     deriving stock (Show, Eq, Generic)
 
 -- | https://spec.graphql.org/draft/#EnumValuesDefinition
-newtype EnumValuesDefinition = EnumValuesDefinition [EnumValueDefinition]
-    deriving stock (Show, Eq, Generic)
+newtype EnumValuesDefinition = EnumValuesDefinition (NonEmpty EnumValueDefinition)
+    deriving stock (Generic)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | https://spec.graphql.org/draft/#EnumValueDefinition
 data EnumValueDefinition
     = EnumValueDefinition (Maybe Description) EnumValue (Maybe Directives)
     deriving stock (Show, Eq, Generic)
+
+enumValueDefinitionName :: EnumValueDefinition -> Name
+enumValueDefinitionName (EnumValueDefinition _ value _) = enumValueName value
 
 -- | https://spec.graphql.org/draft/#EnumTypeExtension
 data EnumTypeExtension
@@ -447,8 +474,9 @@ data InputObjectTypeDefinition
 
 -- | InputFieldsDefinition
 -- https://spec.graphql.org/draft/#InputFieldsDefinition
-newtype InputFieldsDefinition = InputFieldsDefinition [InputValueDefinition]
-    deriving stock (Show, Eq, Generic)
+newtype InputFieldsDefinition = InputFieldsDefinition (NonEmpty InputValueDefinition)
+    deriving stock (Generic)
+    deriving newtype (Show, Eq, Semigroup)
 
 -- | InputObjectTypeExtension
 -- https://spec.graphql.org/draft/#InputObjectTypeExtension
@@ -468,7 +496,7 @@ data DirectiveDefinition
     deriving stock (Show, Eq, Generic)
 
 -- | https://spec.graphql.org/draft/#DirectiveLocations
-type DirectiveLocations = [DirectiveLocation]
+type DirectiveLocations = (NonEmpty DirectiveLocation)
 
 -- | https://spec.graphql.org/draft/#DirectiveLocation
 data DirectiveLocation
@@ -480,4 +508,4 @@ data DirectiveLocation
 -- https://spec.graphql.org/draft/#Name
 newtype Name = Name MisoString
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)

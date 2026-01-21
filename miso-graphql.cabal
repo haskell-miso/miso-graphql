@@ -64,3 +64,15 @@ library
     Miso.GraphQL.AST
     Miso.GraphQL.Lexer
     Miso.GraphQL.Parser
+    Miso.GraphQL.Printer
+
+test-suite miso-graphql-test
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  build-depends:
+    QuickCheck,
+    base,
+    miso,
+    miso-graphql,
+  hs-source-dirs: test

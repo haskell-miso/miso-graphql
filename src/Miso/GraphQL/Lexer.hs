@@ -1,16 +1,19 @@
 module Miso.GraphQL.Lexer where
 
 import Control.Applicative (Alternative (many, some), optional, (<|>))
-import Control.Monad (replicateM)
-import Data.Foldable (Foldable (fold, toList), traverse_)
+import Control.Monad (guard, replicateM)
+import Data.Foldable (Foldable (fold, toList))
 import Data.Functor (void)
 import Data.Ix (Ix (inRange))
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import GHC.Generics (Generic)
 import Miso.GraphQL.AST
 import Miso.Prelude
 import Miso.String qualified as MisoString
 import Miso.Util.Lexer hiding (token)
+
+lex :: Lexer a -> MisoString -> Either LexerError a
+lex lexer = fmap fst . runLexer lexer . mkStream
 
 -- | Token unit for lexing the GraphQL specification
 -- https://spec.graphql.org/draft/#Token
@@ -86,7 +89,12 @@ sign = char '+' <|> char '-'
 
 -- | https://spec.graphql.org/draft/#ExponentPart
 exponentPart :: Lexer MisoString
-exponentPart = undefined
+exponentPart =
+    concatMaybeM
+        [ Just . toMisoString <$> exponentIndicator
+        , fmap toMisoString <$> optional sign
+        , Just . toMisoString <$> some digit
+        ]
 
 -- | https://spec.graphql.org/draft/#FloatValue
 floatValue :: Lexer Double
@@ -170,7 +178,10 @@ ellipsis = void $ string "..."
 -- | https://spec.graphql.org/draft/#NullValue
 -- | https://spec.graphql.org/draft/#LineTerminator
 lineTerminator :: Lexer ()
-lineTerminator = traverse_ (optional . char) ['\r', '\n']
+lineTerminator = do
+    r <- optional . void . char $ '\r'
+    n <- optional . void . char $ '\n'
+    guard $ isJust r || isJust n
 
 nonLineTerminator :: Lexer Char
 nonLineTerminator = satisfy $ not . (`elem` ['\r', '\n'])
@@ -208,5 +219,5 @@ token =
         , TokenName <$> name
         ]
 
-lex :: MisoString -> Either LexerError [Token]
-lex input = fst <$> runLexer (some (many ignored *> token)) (mkStream input)
+tokens :: Lexer [Token]
+tokens = some $ many ignored *> token
