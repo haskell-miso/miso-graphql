@@ -2,14 +2,16 @@
 
 module Arbitrary where
 
-import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Containers.ListUtils (nubOrdOn)
+import Data.Function ((&))
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Maybe (isJust)
 import Miso.GraphQL.AST
 import Miso.GraphQL.Printer ()
 import Miso.Prelude hiding (unlines)
 import Miso.String qualified as MisoString
 import Test.QuickCheck
-import Data.Containers.ListUtils (nubOrdOn)
-import Data.List.NonEmpty qualified as NonEmpty
 
 chooseBoundedEnum :: (Bounded a, Enum a) => Gen a
 chooseBoundedEnum = chooseEnum (minBound, maxBound)
@@ -18,25 +20,28 @@ anyStringChar :: Gen Char
 anyStringChar = elements "abc"
 
 anyMisoString :: Gen MisoString
-anyMisoString = toMisoString <$> listOf anyStringChar
+anyMisoString = toMisoString <$> halfSized listOf anyStringChar
 
 nonEmptyMisoString :: Gen MisoString
-nonEmptyMisoString = toMisoString <$> listOf1 anyStringChar
+nonEmptyMisoString = toMisoString <$> halfSized listOf1 anyStringChar
 
 anyMultiLineMisoString :: Gen MisoString
-anyMultiLineMisoString = MisoString.unlines <$> listOf anyMisoString
+anyMultiLineMisoString = MisoString.unlines <$> halfSized listOf anyMisoString
 
 nonEmptyMultiLineMisoString :: Gen MisoString
-nonEmptyMultiLineMisoString = MisoString.unlines <$> listOf1 nonEmptyMisoString
+nonEmptyMultiLineMisoString = MisoString.unlines <$> halfSized listOf1 nonEmptyMisoString
 
-uniqueOn :: (Arbitrary [a], Ord b) => (a -> b) -> Gen [a]
-uniqueOn f = nubOrdOn f <$> arbitrary
+halfSized :: (Gen a -> Gen b) -> Gen a -> Gen b
+halfSized f g = sized \i -> resize (i `div` 2) (f g)
 
-uniqueOn1 :: (Arbitrary (NonEmpty a), Ord b) => (a -> b) -> Gen (NonEmpty a)
-uniqueOn1 f = NonEmpty.fromList . nubOrdOn f . NonEmpty.toList <$> arbitrary
+uniqueOn :: (Ord b) => (a -> b) -> Gen [a] -> Gen [a]
+uniqueOn f = fmap $ nubOrdOn f
 
-instance (Arbitrary a) => Arbitrary (NonEmpty a) where
-    arbitrary = liftA2 (:|) arbitrary arbitrary
+uniqueOn1 :: (Ord b) => (a -> b) -> Gen (NonEmpty a) -> Gen (NonEmpty a)
+uniqueOn1 f = fmap NonEmpty.fromList . uniqueOn f . fmap NonEmpty.toList
+
+nonEmpty :: Gen a -> Gen (NonEmpty a)
+nonEmpty gen = NonEmpty.fromList <$> listOf1 gen
 
 instance Arbitrary ExecutableDirectiveLocation where
     arbitrary = chooseBoundedEnum
@@ -53,6 +58,9 @@ instance Arbitrary StringValue where
 
 instance Arbitrary Document where
     arbitrary = Document <$> arbitrary
+
+instance {-# OVERLAPPING #-} Arbitrary (NonEmpty Definition) where
+    arbitrary = halfSized nonEmpty arbitrary
 
 instance Arbitrary Definition where
     arbitrary =
@@ -82,6 +90,9 @@ instance Arbitrary OperationDefinition where
 instance Arbitrary OperationType where
     arbitrary = chooseBoundedEnum
 
+instance {-# OVERLAPPING #-} Arbitrary SelectionSet where
+    arbitrary = halfSized nonEmpty arbitrary
+
 instance Arbitrary Selection where
     arbitrary =
         oneof
@@ -97,7 +108,7 @@ instance Arbitrary Alias where
     arbitrary = Alias <$> arbitrary
 
 instance {-# OVERLAPPING #-} Arbitrary Arguments where
-    arbitrary = uniqueOn1 argumentName
+    arbitrary = uniqueOn1 argumentName . halfSized nonEmpty $ arbitrary
 
 instance Arbitrary Argument where
     arbitrary = Argument <$> arbitrary <*> arbitrary
@@ -123,6 +134,9 @@ instance Arbitrary FragmentName where
 instance Arbitrary TypeCondition where
     arbitrary = TypeCondition <$> arbitrary
 
+instance {-# OVERLAPPING #-} Arbitrary [Value] where
+    arbitrary = halfSized listOf arbitrary
+
 instance Arbitrary Value where
     arbitrary =
         oneof
@@ -133,18 +147,18 @@ instance Arbitrary Value where
             , ValueBoolean <$> arbitrary
             , pure ValueNull
             , ValueEnum <$> arbitrary
-            , ValueList <$> arbitrary
+            , ValueList <$> halfSized listOf arbitrary
             , ValueObject <$> arbitrary
             ]
 
 instance Arbitrary EnumValue where
     arbitrary = EnumValue <$> arbitrary
 
+instance {-# OVERLAPPING #-} Arbitrary [ObjectField] where
+    arbitrary = uniqueOn objectFieldName . halfSized listOf $ arbitrary
+
 instance Arbitrary ObjectField where
     arbitrary = ObjectField <$> arbitrary <*> arbitrary
-
-instance {-# OVERLAPPING #-} Arbitrary [ObjectField] where
-    arbitrary = uniqueOn objectFieldName
 
 instance Arbitrary VariableDefinition where
     arbitrary =
@@ -156,7 +170,7 @@ instance Arbitrary VariableDefinition where
             <*> arbitrary
 
 instance {-# OVERLAPPING #-} Arbitrary VariablesDefinition where
-    arbitrary = uniqueOn1 variableDefinitionName
+    arbitrary = uniqueOn1 variableDefinitionName . halfSized nonEmpty $ arbitrary
 
 instance Arbitrary Variable where
     arbitrary = Variable <$> arbitrary
@@ -185,6 +199,9 @@ instance Arbitrary NonNullType where
             , NonNullTypeList <$> arbitrary
             ]
 
+instance {-# OVERLAPPING #-} Arbitrary Directives where
+    arbitrary = halfSized nonEmpty arbitrary
+
 instance Arbitrary Directive where
     arbitrary = Directive <$> arbitrary <*> arbitrary
 
@@ -207,10 +224,13 @@ instance Arbitrary SchemaDefinition where
     arbitrary = SchemaDefinition <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary SchemaExtension where
-    arbitrary = SchemaExtension <$> arbitrary <*> arbitrary
+    arbitrary =
+        SchemaExtension <$> arbitrary <*> arbitrary
+            & flip suchThat \(SchemaExtension directives rootOperationTypeDefinitions) ->
+                isJust directives || isJust rootOperationTypeDefinitions
 
 instance {-# OVERLAPPING #-} Arbitrary RootOperationTypeDefinitions where
-    arbitrary = uniqueOn1 rootOperationType
+    arbitrary = uniqueOn1 rootOperationType . halfSized nonEmpty $ arbitrary
 
 instance Arbitrary RootOperationTypeDefinition where
     arbitrary = RootOperationTypeDefinition <$> arbitrary <*> arbitrary
@@ -256,13 +276,18 @@ instance Arbitrary ObjectTypeDefinition where
             <*> arbitrary
 
 instance Arbitrary ObjectTypeExtension where
-    arbitrary = ObjectTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary =
+        ObjectTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+            & flip suchThat \(ObjectTypeExtension _ implementsInterfaces directives fieldsDefinition) ->
+                isJust implementsInterfaces || isJust directives || isJust fieldsDefinition
 
 instance Arbitrary ImplementsInterfaces where
-    arbitrary = ImplementsInterfaces <$> arbitrary
+    arbitrary = ImplementsInterfaces <$> halfSized nonEmpty arbitrary
 
 instance Arbitrary FieldsDefinition where
-    arbitrary = FieldsDefinition <$> uniqueOn1 fieldDefinitionName
+    arbitrary =
+        FieldsDefinition
+            <$> (uniqueOn1 fieldDefinitionName . halfSized nonEmpty $ arbitrary)
 
 instance Arbitrary FieldDefinition where
     arbitrary =
@@ -274,7 +299,9 @@ instance Arbitrary FieldDefinition where
             <*> arbitrary
 
 instance Arbitrary ArgumentsDefinition where
-    arbitrary = ArgumentsDefinition <$> uniqueOn1 inputValueDefinitionName
+    arbitrary =
+        ArgumentsDefinition
+            <$> (uniqueOn1 inputValueDefinitionName . halfSized nonEmpty $ arbitrary)
 
 instance Arbitrary InputValueDefinition where
     arbitrary =
@@ -297,27 +324,42 @@ instance Arbitrary InterfaceTypeDefinition where
 instance Arbitrary InterfaceTypeExtension where
     arbitrary =
         InterfaceTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+            & flip suchThat \(InterfaceTypeExtension _ implementsInterfaces directives fieldsDefinition) ->
+                isJust implementsInterfaces || isJust directives || isJust fieldsDefinition
 
 instance Arbitrary UnionTypeDefinition where
     arbitrary = UnionTypeDefinition <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
+-- This is needed because the GraphQL spec is ambiguous; what does the following example parse to?
+--   extend union a @x extend input b @x
+instance {-# OVERLAPPING #-} Arbitrary (Maybe UnionMemberTypes) where
+    arbitrary = Just <$> arbitrary
+
 instance Arbitrary UnionMemberTypes where
-    arbitrary = UnionMemberTypes <$> arbitrary
+    arbitrary = UnionMemberTypes <$> (uniqueOn1 id . halfSized nonEmpty $ arbitrary)
 
 instance Arbitrary UnionTypeExtension where
-    arbitrary = UnionTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary =
+        UnionTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+            & flip suchThat \(UnionTypeExtension _ directives unionMemberTypes) ->
+                isJust directives || isJust unionMemberTypes
 
 instance Arbitrary EnumTypeDefinition where
     arbitrary = EnumTypeDefinition <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary EnumValuesDefinition where
-    arbitrary = EnumValuesDefinition <$> uniqueOn1 enumValueDefinitionName
+    arbitrary =
+        EnumValuesDefinition
+            <$> (uniqueOn1 enumValueDefinitionName . halfSized nonEmpty $ arbitrary)
 
 instance Arbitrary EnumValueDefinition where
     arbitrary = EnumValueDefinition <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary EnumTypeExtension where
-    arbitrary = EnumTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary =
+        EnumTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+            & flip suchThat \(EnumTypeExtension _ directives enumValuesDefinition) ->
+                isJust directives || isJust enumValuesDefinition
 
 instance Arbitrary InputObjectTypeDefinition where
     arbitrary =
@@ -328,10 +370,15 @@ instance Arbitrary InputObjectTypeDefinition where
             <*> arbitrary
 
 instance Arbitrary InputFieldsDefinition where
-    arbitrary = InputFieldsDefinition <$> uniqueOn1 inputValueDefinitionName
+    arbitrary =
+        InputFieldsDefinition
+            <$> (uniqueOn1 inputValueDefinitionName . halfSized nonEmpty $ arbitrary)
 
 instance Arbitrary InputObjectTypeExtension where
-    arbitrary = InputObjectTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary =
+        InputObjectTypeExtension <$> arbitrary <*> arbitrary <*> arbitrary
+            & flip suchThat \(InputObjectTypeExtension _ directives inputFieldsDefinition) ->
+                isJust directives || isJust inputFieldsDefinition
 
 instance Arbitrary DirectiveDefinition where
     arbitrary =
@@ -341,6 +388,9 @@ instance Arbitrary DirectiveDefinition where
             <*> arbitrary
             <*> arbitrary
             <*> arbitrary
+
+instance {-# OVERLAPPING #-} Arbitrary DirectiveLocations where
+    arbitrary = halfSized nonEmpty arbitrary
 
 instance Arbitrary DirectiveLocation where
     arbitrary =

@@ -332,12 +332,11 @@ instance ToMisoString ScalarTypeDefinition where
 instance ToMisoString ScalarTypeExtension where
     toMisoString (ScalarTypeExtension name directives) =
         unwords
-            . catMaybes
-            $ [ Just "extend"
-              , Just "scalar"
-              , Just $ toMisoString name
-              , toMisoString <$> directives
-              ]
+            [ "extend"
+            , "scalar"
+            , toMisoString name
+            , toMisoString directives
+            ]
 
 -- | A GraphQL 'ObjectTypeDefinition'
 -- https://spec.graphql.org/draft/#ObjectTypeDefinition

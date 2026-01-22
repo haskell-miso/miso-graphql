@@ -1,6 +1,5 @@
 module RoundtripSpec where
 
-import Miso.GraphQL.AST
 import Miso.GraphQL.Lexer (Token)
 import Miso.GraphQL.Lexer qualified as Lexer
 import Miso.GraphQL.Parser qualified as Parser
@@ -12,16 +11,15 @@ import Arbitrary ()
 import Test.QuickCheck
 import Test.Hspec
 
-roundtrip :: (Eq a, Show a, ToMisoString a) => Parser Token a -> a -> Property
-roundtrip parser a =
-    counterexample (fromMisoString str)
-        . counterexample ("<- " <> show lexed)
-        . counterexample ("<- " <> show parsed)
-        $ Right a == parsed
+roundtrip :: (Eq a, Show a, ToMisoString a) => Parser Token a -> a -> Expectation
+roundtrip parser a = parsed `shouldBe` Right a
   where
     str = toMisoString a
-    lexed = Lexer.lex Lexer.tokens str
     parsed = Parser.parse' Lexer.tokens parser str
 
 spec :: Spec
-spec = it "round trips" . property $ roundtrip @Document Parser.document
+spec = do
+    it "Name" . property $ roundtrip Parser.name
+    it "Description" . property $ roundtrip Parser.description
+    it "Value" . property $ roundtrip Parser.value
+    it "Document" . property $ roundtrip Parser.document

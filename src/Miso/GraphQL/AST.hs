@@ -80,7 +80,7 @@ data OperationType
 
 -- | A GraphQL 'SelectionSet'
 -- https://spec.graphql.org/draft/#SelectionSet
-type SelectionSet = (NonEmpty Selection)
+type SelectionSet = NonEmpty Selection
 
 -- | A GraphQL 'Selection' type
 -- https://spec.graphql.org/draft/#Selection
@@ -104,11 +104,11 @@ data Field
 -- | A GraphQL 'Alias'
 -- https://spec.graphql.org/draft/#Alias
 newtype Alias = Alias Name
-    deriving stock (Show, Eq, Generic)
+    deriving stock (Show, Eq, Ord, Generic)
 
 -- | GraphQL 'Arguments'
 -- https://spec.graphql.org/draft/#Arguments
-type Arguments = (NonEmpty Argument)
+type Arguments = NonEmpty Argument
 
 -- | A GraphQL 'Argument'
 -- https://spec.graphql.org/draft/#Arguments
@@ -144,7 +144,7 @@ data FragmentDefinition
 -- https://spec.graphql.org/draft/#FragmentName
 newtype FragmentName = FragmentName Name
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)
 
 -- | A GraphQL 'TypeCondition'
 -- https://spec.graphql.org/draft/#TypeCondition
@@ -170,7 +170,7 @@ data Value
 -- https://spec.graphql.org/draft/#EnumValue
 newtype EnumValue = EnumValue Name
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)
 
 enumValueName :: EnumValue -> Name
 enumValueName (EnumValue name) = name
@@ -185,7 +185,7 @@ objectFieldName (ObjectField name _) = name
 
 -- | GraphQL 'VariablesDefinition'
 -- https://spec.graphql.org/draft/#VariablesDefinition
-type VariablesDefinition = (NonEmpty VariableDefinition)
+type VariablesDefinition = NonEmpty VariableDefinition
 
 -- | A GraphQL 'VariableDefinition'
 -- https://spec.graphql.org/draft/#VariableDefinition
@@ -205,7 +205,7 @@ variableDefinitionName (VariableDefinition _ var _ _ _) = variableName var
 -- https://spec.graphql.org/draft/#Variable
 newtype Variable = Variable Name
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)
 
 variableName :: Variable -> Name
 variableName (Variable name) = name
@@ -227,7 +227,7 @@ data Type
 -- https://spec.graphql.org/draft/#NamedType
 newtype NamedType = NamedType Name
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Monoid, Semigroup)
+    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)
 
 namedTypeName :: NamedType -> Name
 namedTypeName (NamedType name) = name
@@ -246,7 +246,7 @@ data NonNullType
 
 -- | The GraphQL 'Directives' type
 -- https://spec.graphql.org/draft/#Directives
-type Directives = (NonEmpty Directive)
+type Directives = NonEmpty Directive
 
 -- | A GraphQL 'Directive'
 -- https://spec.graphql.org/draft/#Directive
@@ -284,7 +284,7 @@ data SchemaExtension
     deriving stock (Show, Eq, Generic)
 
 -- | List of 'RootOperationTypeDefinition'
-type RootOperationTypeDefinitions = (NonEmpty RootOperationTypeDefinition)
+type RootOperationTypeDefinitions = NonEmpty RootOperationTypeDefinition
 
 -- | https://spec.graphql.org/draft/#RootOperationTypeDefinition
 data RootOperationTypeDefinition
@@ -329,7 +329,7 @@ data ScalarTypeDefinition
 
 -- | A GraphQL 'ScalarTypeExtension'
 -- https://spec.graphql.org/draft/#ScalarTypeExtension
-data ScalarTypeExtension = ScalarTypeExtension Name (Maybe Directives)
+data ScalarTypeExtension = ScalarTypeExtension Name Directives
     deriving stock (Show, Eq, Generic)
 
 -- | A GraphQL 'ObjectTypeDefinition'
@@ -496,7 +496,7 @@ data DirectiveDefinition
     deriving stock (Show, Eq, Generic)
 
 -- | https://spec.graphql.org/draft/#DirectiveLocations
-type DirectiveLocations = (NonEmpty DirectiveLocation)
+type DirectiveLocations = NonEmpty DirectiveLocation
 
 -- | https://spec.graphql.org/draft/#DirectiveLocation
 data DirectiveLocation
