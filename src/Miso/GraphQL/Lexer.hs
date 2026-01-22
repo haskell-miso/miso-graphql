@@ -1,6 +1,6 @@
 module Miso.GraphQL.Lexer where
 
-import Control.Applicative (Alternative (many, some), optional, (<|>))
+import Control.Applicative (Alternative (many, some, empty), optional, (<|>))
 import Control.Monad (guard, replicateM)
 import Data.Foldable (Foldable (fold, toList))
 import Data.Functor (void)
@@ -11,9 +11,10 @@ import Miso.GraphQL.AST
 import Miso.Prelude
 import Miso.String qualified as MisoString
 import Miso.Util.Lexer hiding (token)
+import Debug.Trace
 
 lex :: Lexer a -> MisoString -> Either LexerError a
-lex lexer = fmap fst . runLexer lexer . mkStream
+lex lexer = trace "OH BOY HERE WE GO LEXING" $ fmap fst . runLexer lexer . mkStream . traceShowId
 
 -- | Token unit for lexing the GraphQL specification
 -- https://spec.graphql.org/draft/#Token
@@ -32,32 +33,42 @@ concatM xs = fold <$> sequence xs
 concatMaybeM :: (Traversable t, Monad m, Monoid a) => t (m (Maybe a)) -> m a
 concatMaybeM xs = fold . catMaybes . toList <$> sequence xs
 
+traceLexer :: (Show a) => String -> Lexer a -> Lexer a
+traceLexer s l = do
+    traceM . (("lexer> " <> s <> " ") <>) . show =<< withLocation peek
+    a <-
+        l <|> do
+            traceM $ "!lexer " <> s
+            empty
+    traceM $ "<lexer " <> s <> ": " <> show a
+    pure a
+
 inAnyRange :: (Foldable t, Ix a) => t (a, a) -> a -> Bool
 inAnyRange = flip $ any . flip inRange
 
 -- | https://spec.graphql.org/draft/#SourceCharacter
 sourceCharacter :: Lexer Char
-sourceCharacter = satisfy $ const True
+sourceCharacter = traceLexer "sourceCharacter" $ satisfy $ const True
 
 -- | https://spec.graphql.org/draft/#Letter
 letter :: Lexer Char
-letter = satisfy $ inAnyRange [('A', 'Z'), ('a', 'z')]
+letter = traceLexer "letter" $ satisfy $ inAnyRange [('A', 'Z'), ('a', 'z')]
 
 -- | https://spec.graphql.org/draft/#Digit
 digit :: Lexer Char
-digit = satisfy $ inRange ('0', '9')
+digit = traceLexer "digit" $ satisfy $ inRange ('0', '9')
 
 -- | https://spec.graphql.org/draft/#HexDigit
 hexDigit :: Lexer Char
-hexDigit = satisfy $ inAnyRange [('0', '9'), ('A', 'F'), ('a', 'f')]
+hexDigit = traceLexer "hexDigit" $ satisfy $ inAnyRange [('0', '9'), ('A', 'F'), ('a', 'f')]
 
 -- | https://spec.graphql.org/draft/#NonZeroDigit
 nonZeroDigit :: Lexer Char
-nonZeroDigit = satisfy $ inRange ('1', '9')
+nonZeroDigit = traceLexer "nonZeroDigit" $ satisfy $ inRange ('1', '9')
 
 -- | https://spec.graphql.org/draft/#IntegerPart
 integerPart :: Lexer MisoString
-integerPart =
+integerPart = traceLexer "integerPart" $
     concatMaybeM
         [ optional $ string "-"
         , Just
@@ -69,11 +80,11 @@ integerPart =
 
 -- | https://spec.graphql.org/draft/#IntValue
 intValue :: Lexer Int
-intValue = fromMisoString <$> integerPart
+intValue = traceLexer "intValue" $ fromMisoString <$> integerPart
 
 -- | https://spec.graphql.org/draft/#FractionalPart
 fractionalPart :: Lexer MisoString
-fractionalPart =
+fractionalPart = traceLexer "fractionalPart" $
     concatM
         [ string "."
         , toMisoString <$> some digit
@@ -81,15 +92,15 @@ fractionalPart =
 
 -- | https://spec.graphql.org/draft/#ExponentIndicator
 exponentIndicator :: Lexer Char
-exponentIndicator = char 'e' <|> char 'E'
+exponentIndicator = traceLexer "exponentIndicator" $ char 'e' <|> char 'E'
 
 -- | https://spec.graphql.org/draft/#Sign
 sign :: Lexer Char
-sign = char '+' <|> char '-'
+sign = traceLexer "sign" $ char '+' <|> char '-'
 
 -- | https://spec.graphql.org/draft/#ExponentPart
 exponentPart :: Lexer MisoString
-exponentPart =
+exponentPart = traceLexer "exponentPart" $
     concatMaybeM
         [ Just . toMisoString <$> exponentIndicator
         , fmap toMisoString <$> optional sign
@@ -98,7 +109,7 @@ exponentPart =
 
 -- | https://spec.graphql.org/draft/#FloatValue
 floatValue :: Lexer Double
-floatValue =
+floatValue = traceLexer "floatValue" $
     fromMisoString
         <$> concatMaybeM
             [ Just <$> integerPart
@@ -108,7 +119,7 @@ floatValue =
 
 -- | https://spec.graphql.org/draft/#Name
 name :: Lexer Name
-name =
+name = traceLexer "name" $
     Name
         <$> concatM
             [ toMisoString <$> (letter <|> char '_')
@@ -117,17 +128,17 @@ name =
 
 -- | https://spec.graphql.org/draft/#StringValue
 stringValue :: Lexer StringValue
-stringValue =
+stringValue = traceLexer "stringValue" $
     oneOf
         [ BlockString <$> blockString
         , SingleLineString <$> singleLineString
         ]
 
 singleLineString :: Lexer MisoString
-singleLineString = delimiter *> go
+singleLineString = traceLexer "singleLineString" $ delimiter *> go
   where
     delimiter :: Lexer ()
-    delimiter = void $ char '\"'
+    delimiter = void $ traceLexer "singleLineString delimiter" $ char '\"'
     -- https://spec.graphql.org/draft/#EscapedCharacter
     escapedCharacter :: Lexer Char
     escapedCharacter = oneOf $ char <$> "\"\\/bfnrt"
@@ -144,55 +155,61 @@ singleLineString = delimiter *> go
             ]
     go :: Lexer MisoString
     go =
-        oneOf
-            [ "" <$ delimiter
-            , concatM [string "\\", toMisoString <$> escapedCharacter, go]
-            , concatM [string "\\u", escapedUnicode, go]
-            , liftA2 MisoString.cons nonLineTerminator go
-            ]
+        optional delimiter >>= \case
+            Just _ -> pure ""
+            Nothing ->
+                oneOf
+                    [ concatM [string "\\", toMisoString <$> escapedCharacter, go]
+                    , concatM [string "\\u", escapedUnicode, go]
+                    , liftA2 MisoString.cons nonLineTerminator go
+                    ]
 
 -- | https://spec.graphql.org/draft/#BlockString
 blockString :: Lexer MisoString
-blockString = delimiter *> go
+blockString = traceLexer "blockString" $ delimiter *> go
   where
     delimiter :: Lexer ()
-    delimiter = void $ string "\"\"\""
+    delimiter = void $ traceLexer "blockString delimiter" $ string "\"\"\""
     go :: Lexer MisoString
     go =
-        oneOf
-            [ "" <$ delimiter
-            , concatM
-                [ toMisoString <$> char '\\'
-                , liftA2 MisoString.cons sourceCharacter go
-                ]
-            , liftA2 MisoString.cons sourceCharacter go
-            ]
+        optional delimiter >>= \case
+            Just _ -> pure ""
+            Nothing ->
+                oneOf
+                    [ "" <$ delimiter
+                    , concatM
+                        [ toMisoString <$> char '\\'
+                        , toMisoString <$> sourceCharacter
+                        , go
+                        ]
+                    , liftA2 MisoString.cons sourceCharacter go
+                    ]
 
 -- | https://spec.graphql.org/draft/#Punctuator
 punctuator :: Lexer Char
-punctuator = oneOf $ char <$> "!$&():=@[]{|}"
+punctuator = traceLexer "punctuator" $ oneOf $ char <$> "!$&():=@[]{|}"
 
 ellipsis :: Lexer ()
-ellipsis = void $ string "..."
+ellipsis = traceLexer "ellipsis" $ void $ string "..."
 
 -- | https://spec.graphql.org/draft/#NullValue
 -- | https://spec.graphql.org/draft/#LineTerminator
 lineTerminator :: Lexer ()
-lineTerminator = do
-    r <- optional . void . char $ '\r'
-    n <- optional . void . char $ '\n'
+lineTerminator = traceLexer "lineTerminator" $ do
+    r <- optional . char $ '\r'
+    n <- optional . char $ '\n'
     guard $ isJust r || isJust n
 
 nonLineTerminator :: Lexer Char
-nonLineTerminator = satisfy $ not . (`elem` ['\r', '\n'])
+nonLineTerminator = traceLexer "nonLineTerminator" $ satisfy $ not . (`elem` ['\r', '\n'])
 
 -- | https://spec.graphql.org/draft/#Comment
 comment :: Lexer ()
-comment = void $ char '#' *> many nonLineTerminator
+comment = void $ traceLexer "comment" $ char '#' *> many nonLineTerminator
 
 -- | https://spec.graphql.org/draft/#Ignored
 ignored :: Lexer ()
-ignored =
+ignored = traceLexer "ignored" $
     oneOf
         [ unicodeBom
         , whitespace
@@ -202,14 +219,14 @@ ignored =
         ]
   where
     -- https://spec.graphql.org/draft/#UnicodeBOM
-    unicodeBom = void $ char '\xFEFF'
+    unicodeBom = void $ traceLexer "unicodeBom" $ char '\xFEFF'
     -- https://spec.graphql.org/draft/#Whitespace
-    whitespace = void $ char '\t' <|> char ' '
+    whitespace = void $ traceLexer "whitespace" $ some $ char '\t' <|> char ' '
     -- https://spec.graphql.org/draft/#Comma
-    comma = void $ char ','
+    comma = void $ traceLexer "comma" $ char ','
 
 token :: Lexer Token
-token =
+token = traceLexer "token" $
     oneOf
         [ TokenPunctuator <$> punctuator
         , TokenEllipsis <$ ellipsis
@@ -220,4 +237,4 @@ token =
         ]
 
 tokens :: Lexer [Token]
-tokens = some $ many ignored *> token
+tokens = traceLexer "tokens" $ some $ many ignored *> token

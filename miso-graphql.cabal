@@ -69,10 +69,15 @@ library
 test-suite miso-graphql-test
   import: common
   type: exitcode-stdio-1.0
+  hs-source-dirs: test
   main-is: Main.hs
   build-depends:
     QuickCheck,
     base,
+    containers,
+    hspec,
     miso,
     miso-graphql,
-  hs-source-dirs: test
+  other-modules:
+    Arbitrary
+    RoundtripSpec
