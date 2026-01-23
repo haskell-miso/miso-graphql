@@ -1,8 +1,10 @@
 module Miso.GraphQL.AST where
 
 import Data.List.NonEmpty (NonEmpty)
+import Data.String (IsString)
 import GHC.Generics (Generic)
 import Miso.Prelude
+import Miso.String (FromMisoString, ToMisoString)
 
 -- | https://spec.graphql.org/draft/#ExecutableDirectiveLocation
 data ExecutableDirectiveLocation
@@ -69,6 +71,10 @@ data OperationDefinition
         (Maybe Directives)
         SelectionSet
     deriving stock (Show, Eq, Generic)
+
+operationSelectionSet :: OperationDefinition -> SelectionSet
+operationSelectionSet (AnonymousQuery selectionSet) = selectionSet
+operationSelectionSet (OperationDefinition _ _ _ _ _ selectionSet) = selectionSet
 
 -- | A GraphQL 'Operation' type
 -- https://spec.graphql.org/draft/#OperationType
@@ -222,6 +228,12 @@ data Type
     | TypeList ListType
     | TypeNonNull NonNullType
     deriving stock (Show, Eq, Generic)
+
+typeName :: Type -> Name
+typeName (TypeNamed nt) = namedTypeName nt
+typeName (TypeList (ListType t)) = typeName t
+typeName (TypeNonNull (NonNullTypeNamed nt)) = namedTypeName nt
+typeName (TypeNonNull (NonNullTypeList (ListType t))) = typeName t
 
 -- | A GraphQL 'NamedType'
 -- https://spec.graphql.org/draft/#NamedType
@@ -508,4 +520,5 @@ data DirectiveLocation
 -- https://spec.graphql.org/draft/#Name
 newtype Name = Name MisoString
     deriving stock (Generic)
-    deriving newtype (Show, Eq, Ord, Monoid, Semigroup)
+    deriving newtype
+        (Show, Eq, Ord, Monoid, Semigroup, IsString, ToMisoString, FromMisoString)

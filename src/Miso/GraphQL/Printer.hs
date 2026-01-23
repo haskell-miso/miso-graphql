@@ -586,8 +586,3 @@ instance ToMisoString TypeSystemDirectiveLocation where
     toMisoString ENUM_VALUE = "ENUM_VALUE"
     toMisoString INPUT_OBJECT = "INPUT_OBJECT"
     toMisoString INPUT_FIELD_DEFINITION = "INPUT_FIELD_DEFINITION"
-
--- | A GraphQL 'Name'
--- https://spec.graphql.org/draft/#Name
-instance ToMisoString Name where
-    toMisoString (Name name) = name

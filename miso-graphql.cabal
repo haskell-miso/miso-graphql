@@ -62,9 +62,12 @@ library
 
   exposed-modules:
     Miso.GraphQL.AST
+    Miso.GraphQL.Class
+    Miso.GraphQL.JSON
     Miso.GraphQL.Lexer
     Miso.GraphQL.Parser
     Miso.GraphQL.Printer
+    Miso.GraphQL.TH
 
 test-suite miso-graphql-test
   import: common
