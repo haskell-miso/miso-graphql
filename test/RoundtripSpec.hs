@@ -6,7 +6,7 @@ import Miso.GraphQL.Parser qualified as Parser
 import Miso.GraphQL.Printer ()
 import Miso.Prelude hiding (unlines)
 import Miso.String (ToMisoString)
-import Miso.Util.Parser (Parser)
+import Miso.Util.Parser (Parser, endOfInput)
 import Arbitrary ()
 import Test.QuickCheck
 import Test.Hspec
@@ -15,7 +15,7 @@ roundtrip :: (Eq a, Show a, ToMisoString a) => Parser Token a -> a -> Expectatio
 roundtrip parser a = parsed `shouldBe` Right a
   where
     str = toMisoString a
-    parsed = Parser.parse' Lexer.tokens parser str
+    parsed = Parser.parse' Lexer.tokens (parser <* endOfInput) str
 
 spec :: Spec
 spec = do

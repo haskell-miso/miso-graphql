@@ -343,8 +343,6 @@ rootOperation typeDefinitions ot (Name name) (FieldDefinition desc (Name fieldNa
                 . pure
                 $ clause [conP name' [varP f | ((_, f), _) <- args']] toOperationBody []
             ]
-            -- , sigD name' returnType
-            -- , funD name' . pure $ clause (varP . snd . fst <$> args') body mempty
         ]
   where
     capitalise :: MisoString -> MisoString
