@@ -1,0 +1,16 @@
+type Person {
+  id: ID!
+  name: String!
+  groups: [Group!]!
+}
+
+type Group {
+  id: ID!
+  name: String!
+  people: [Person!]!
+}
+
+type Query {
+  person(id: ID!): Person
+  group(id: ID!): Group
+}

@@ -86,3 +86,17 @@ test-suite miso-graphql-test
   other-modules:
     Arbitrary
     RoundtripSpec
+
+executable miso-graphql-example
+  import: common
+  hs-source-dirs: example
+  main-is: Main.hs
+  ghc-options: -ddump-splices
+  build-depends:
+    QuickCheck,
+    base,
+    containers,
+    hspec,
+    miso,
+    miso-graphql,
+    template-haskell,
