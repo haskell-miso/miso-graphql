@@ -521,4 +521,12 @@ data DirectiveLocation
 newtype Name = Name MisoString
     deriving stock (Generic)
     deriving newtype
-        (Show, Eq, Ord, Monoid, Semigroup, IsString, ToMisoString, FromMisoString)
+        ( Show
+        , Eq
+        , Ord
+        , Monoid
+        , Semigroup
+        , IsString
+        , ToMisoString
+        , FromMisoString
+        )

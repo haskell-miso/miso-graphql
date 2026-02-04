@@ -53,74 +53,74 @@ lookaheadCantBe' :: Char -> a -> Parser Token a
 lookaheadCantBe' = lookaheadCantBe . TokenPunctuator
 
 nextToken :: ParserT () [a] [] a
-nextToken =  satisfy $ const True
+nextToken = satisfy $ const True
 
 -- | https://spec.graphql.org/draft/#Document
 document :: Parser Token Document
-document =  Document <$> some1 definition
+document = Document <$> some1 definition
 
 -- | https://spec.graphql.org/draft/#Definition
 definition :: Parser Token Definition
 definition =
-     oneOf
-            [ DefinitionExecutable <$> executableDefinition
-            , DefinitionTypeSystem <$> typeSystemDefinition
-            , ExtensionTypeSystem <$> typeSystemExtension
-            ]
+    oneOf
+        [ DefinitionExecutable <$> executableDefinition
+        , DefinitionTypeSystem <$> typeSystemDefinition
+        , ExtensionTypeSystem <$> typeSystemExtension
+        ]
 
 -- https://spec.graphql.org/draft/#ExecutableDefinition
 executableDefinition :: Parser Token ExecutableDefinition
 executableDefinition =
-     oneOf
-            [ DefinitionOperation <$> operationDefinition
-            , DefinitionFragment <$> fragmentDefinition
-            ]
+    oneOf
+        [ DefinitionOperation <$> operationDefinition
+        , DefinitionFragment <$> fragmentDefinition
+        ]
 
 -- | A GraphQL 'OperationDefinition'
 -- https://spec.graphql.org/draft/#OperationDefinition
 operationDefinition :: Parser Token OperationDefinition
 operationDefinition =
-     oneOf
-            [ AnonymousQuery <$> selectionSet
-            , OperationDefinition
-                <$> optional description
-                <*> operationType
-                <*> optional name
-                <*> optional variablesDefinition
-                <*> optional directives
-                <*> selectionSet
-            ]
+    oneOf
+        [ AnonymousQuery <$> selectionSet
+        , OperationDefinition
+            <$> optional description
+            <*> operationType
+            <*> optional name
+            <*> optional variablesDefinition
+            <*> optional directives
+            <*> selectionSet
+        ]
 
 -- | A GraphQL 'Operation' type
 -- https://spec.graphql.org/draft/#OperationType
 operationType :: Parser Token OperationType
 operationType =
-     oneOf
-            [ Query <$ keyword "query"
-            , Mutation <$ keyword "mutation"
-            , Subscription <$ keyword "subscription"
-            ]
+    oneOf
+        [ Query <$ keyword "query"
+        , Mutation <$ keyword "mutation"
+        , Subscription <$ keyword "subscription"
+        ]
 
 -- | A GraphQL 'SelectionSet'
 -- https://spec.graphql.org/draft/#SelectionSet
 selectionSet :: Parser Token SelectionSet
-selectionSet =  enclosed' '{' '}' $ some1 selection
+selectionSet = enclosed' '{' '}' $ some1 selection
 
 -- | A GraphQL 'Selection' type
 -- https://spec.graphql.org/draft/#Selection
 selection :: Parser Token Selection
 selection =
-     oneOf
-            [ SelectionField <$> field
-            , SelectionFragmentSpread <$> fragmentSpread
-            , SelectionInlineFragment <$> inlineFragment
-            ]
+    oneOf
+        [ SelectionField <$> field
+        , SelectionFragmentSpread <$> fragmentSpread
+        , SelectionInlineFragment <$> inlineFragment
+        ]
 
 -- | A GraphQL 'Field' type
 -- https://spec.graphql.org/draft/#Field
 field :: Parser Token Field
 field =
-     Field
+    Field
         <$> optional alias
         <*> name
         <*> optional arguments
@@ -130,26 +130,26 @@ field =
 -- | A GraphQL 'Alias'
 -- https://spec.graphql.org/draft/#Alias
 alias :: Parser Token Alias
-alias =  Alias <$> name <* punctuator ':'
+alias = Alias <$> name <* punctuator ':'
 
 -- | GraphQL 'Arguments'
 -- https://spec.graphql.org/draft/#Arguments
 arguments :: Parser Token Arguments
 arguments =
-     enclosed' '(' ')'
+    enclosed' '(' ')'
         . uniqueOn argumentName
         $ some1 argument
 
 -- | A GraphQL 'Argument'
 -- https://spec.graphql.org/draft/#Arguments
 argument :: Parser Token Argument
-argument =  Argument <$> name <* punctuator ':' <*> value
+argument = Argument <$> name <* punctuator ':' <*> value
 
 -- | GraphQL 'FragmentSpread' type
 -- https://spec.graphql.org/draft/#FragmentSpread
 fragmentSpread :: Parser Token FragmentSpread
 fragmentSpread =
-     FragmentSpread
+    FragmentSpread
         <$ token_ TokenEllipsis
         <*> fragmentName
         <*> optional directives
@@ -158,7 +158,7 @@ fragmentSpread =
 -- https://spec.graphql.org/draft/#InlineFragment
 inlineFragment :: Parser Token InlineFragment
 inlineFragment =
-     InlineFragment
+    InlineFragment
         <$ token_ TokenEllipsis
         <*> optional typeCondition
         <*> optional directives
@@ -168,7 +168,7 @@ inlineFragment =
 -- https://spec.graphql.org/draft/#FragmentDefinition
 fragmentDefinition :: Parser Token FragmentDefinition
 fragmentDefinition =
-     FragmentDefinition
+    FragmentDefinition
         <$> optional description
         <* keyword "fragment"
         <*> fragmentName
@@ -179,58 +179,58 @@ fragmentDefinition =
 -- | A GraphQL 'FragmentName'
 -- https://spec.graphql.org/draft/#FragmentName
 fragmentName :: Parser Token FragmentName
-fragmentName =  FragmentName <$> nameButNot ["on"]
+fragmentName = FragmentName <$> nameButNot ["on"]
 
 -- | A GraphQL 'TypeCondition'
 -- https://spec.graphql.org/draft/#TypeCondition
 typeCondition :: Parser Token TypeCondition
-typeCondition =  TypeCondition <$ keyword "on" <*> namedType
+typeCondition = TypeCondition <$ keyword "on" <*> namedType
 
 -- | A GraphQL 'Value'
 -- https://spec.graphql.org/draft/#Value
 value :: Parser Token Value
 value =
-     oneOf
-            [ ValueVariable <$> variable
-            , nextToken >>= \case
-                TokenInt i -> pure $ ValueInt i
-                TokenFloat f -> pure $ ValueFloat f
-                TokenString s -> pure $ ValueString s
-                _ -> empty
-            , ValueBoolean True <$ keyword "true"
-            , ValueBoolean False <$ keyword "false"
-            , ValueNull <$ keyword "null"
-            , ValueEnum <$> enumValue
-            , ValueList <$> listValue
-            , ValueObject <$> objectValue
-            ]
+    oneOf
+        [ ValueVariable <$> variable
+        , nextToken >>= \case
+            TokenInt i -> pure $ ValueInt i
+            TokenFloat f -> pure $ ValueFloat f
+            TokenString s -> pure $ ValueString s
+            _ -> empty
+        , ValueBoolean True <$ keyword "true"
+        , ValueBoolean False <$ keyword "false"
+        , ValueNull <$ keyword "null"
+        , ValueEnum <$> enumValue
+        , ValueList <$> listValue
+        , ValueObject <$> objectValue
+        ]
 
 -- | https://spec.graphql.org/draft/#ListValue
 listValue :: Parser Token [Value]
-listValue =  enclosed' '[' ']' $ many value
+listValue = enclosed' '[' ']' $ many value
 
 -- | https://spec.graphql.org/draft/#ObjectValue
 objectValue :: Parser Token [ObjectField]
 objectValue =
-     enclosed' '{' '}'
+    enclosed' '{' '}'
         . uniqueOn objectFieldName
         $ many objectField
 
 -- | A GraphQL 'EnumValue'
 -- https://spec.graphql.org/draft/#EnumValue
 enumValue :: Parser Token EnumValue
-enumValue =  EnumValue <$> nameButNot ["true", "false", "null"]
+enumValue = EnumValue <$> nameButNot ["true", "false", "null"]
 
 -- | A GraphQL 'ObjectField'
 -- https://spec.graphql.org/draft/#ObjectField
 objectField :: Parser Token ObjectField
-objectField =  ObjectField <$> name <* punctuator ':' <*> value
+objectField = ObjectField <$> name <* punctuator ':' <*> value
 
 -- | GraphQL 'VariablesDefinition'
 -- https://spec.graphql.org/draft/#VariablesDefinition
 variablesDefinition :: Parser Token VariablesDefinition
 variablesDefinition =
-     enclosed' '(' ')'
+    enclosed' '(' ')'
         . uniqueOn variableDefinitionName
         $ some1 variableDefinition
 
@@ -238,7 +238,7 @@ variablesDefinition =
 -- https://spec.graphql.org/draft/#VariableDefinition
 variableDefinition :: Parser Token VariableDefinition
 variableDefinition =
-     VariableDefinition
+    VariableDefinition
         <$> optional description
         <*> variable
         <* punctuator ':'
@@ -249,53 +249,53 @@ variableDefinition =
 -- | A GraphQL 'Variable'
 -- https://spec.graphql.org/draft/#Variable
 variable :: Parser Token Variable
-variable =  Variable <$ punctuator '$' <*> name
+variable = Variable <$ punctuator '$' <*> name
 
 -- | A GraphQL 'DefaultValue'
 -- https://spec.graphql.org/draft/#DefaultValue
 defaultValue :: Parser Token DefaultValue
-defaultValue =  DefaultValue <$ punctuator '=' <*> value
+defaultValue = DefaultValue <$ punctuator '=' <*> value
 
 -- | A GraphQL 'Type'
 -- https://spec.graphql.org/draft/#Type
 type' :: Parser Token Type
 type' =
-     oneOf
-            [ TypeNonNull <$> nonNullType
-            , TypeList <$> listType
-            , TypeNamed <$> namedType
-            ]
+    oneOf
+        [ TypeNonNull <$> nonNullType
+        , TypeList <$> listType
+        , TypeNamed <$> namedType
+        ]
 
 -- | A GraphQL 'NamedType'
 -- https://spec.graphql.org/draft/#NamedType
 namedType :: Parser Token NamedType
-namedType =  NamedType <$> name
+namedType = NamedType <$> name
 
 -- | A GraphQL 'ListType'
 -- https://spec.graphql.org/draft/#ListType
 listType :: Parser Token ListType
-listType =  enclosed' '[' ']' $ ListType <$> type'
+listType = enclosed' '[' ']' $ ListType <$> type'
 
 -- | A GraphQL 'NonNullType'
 -- https://spec.graphql.org/draft/#NonNullType
 nonNullType :: Parser Token NonNullType
 nonNullType =
-     oneOf
-            [ NonNullTypeNamed <$> namedType
-            , NonNullTypeList <$> listType
-            ]
+    oneOf
+        [ NonNullTypeNamed <$> namedType
+        , NonNullTypeList <$> listType
+        ]
         <* punctuator '!'
 
 -- | The GraphQL 'Directives' type
 -- https://spec.graphql.org/draft/#Directives
 directives :: Parser Token Directives
-directives =  some1 directive
+directives = some1 directive
 
 -- | A GraphQL 'Directive'
 -- https://spec.graphql.org/draft/#Directive
 directive :: Parser Token Directive
 directive =
-     Directive
+    Directive
         <$ punctuator '@'
         <*> name
         <*> optional arguments
@@ -304,26 +304,26 @@ directive =
 -- https://spec.graphql.org/draft/#TypeSystemDefinition
 typeSystemDefinition :: Parser Token TypeSystemDefinition
 typeSystemDefinition =
-     oneOf
-            [ DefinitionSchema <$> schemaDefinition
-            , DefinitionType <$> typeDefinition
-            , DefinitionDirective <$> directiveDefinition
-            ]
+    oneOf
+        [ DefinitionSchema <$> schemaDefinition
+        , DefinitionType <$> typeDefinition
+        , DefinitionDirective <$> directiveDefinition
+        ]
 
 -- | A GraphQL 'TypeSystemExtension'
 -- https://spec.graphql.org/draft/#TypeSystemExtension
 typeSystemExtension :: Parser Token TypeSystemExtension
 typeSystemExtension =
-     oneOf
-            [ ExtensionSchema <$> schemaExtension
-            , ExtensionType <$> typeExtension
-            ]
+    oneOf
+        [ ExtensionSchema <$> schemaExtension
+        , ExtensionType <$> typeExtension
+        ]
 
 -- | A GraphQL 'SchemaDefinition'
 -- https://spec.graphql.org/draft/#SchemaDefinition
 schemaDefinition :: Parser Token SchemaDefinition
 schemaDefinition =
-     SchemaDefinition
+    SchemaDefinition
         <$> optional description
         <* keyword "schema"
         <*> optional directives
@@ -332,7 +332,7 @@ schemaDefinition =
 -- | A GraphQL 'SchemaExtension'
 -- https://spec.graphql.org/draft/#SchemaExtension
 schemaExtension :: Parser Token SchemaExtension
-schemaExtension =  do
+schemaExtension = do
     keyword "extend"
     keyword "schema"
     directives <- optional directives
@@ -346,7 +346,7 @@ schemaExtension =  do
 -- | List of 'RootOperationTypeDefinition'
 rootOperationTypeDefinitions :: Parser Token RootOperationTypeDefinitions
 rootOperationTypeDefinitions =
-     enclosed' '{' '}'
+    enclosed' '{' '}'
         . uniqueOn rootOperationType
         . some1
         $ rootOperationTypeDefinition
@@ -354,7 +354,7 @@ rootOperationTypeDefinitions =
 -- | https://spec.graphql.org/draft/#RootOperationTypeDefinition
 rootOperationTypeDefinition :: Parser Token RootOperationTypeDefinition
 rootOperationTypeDefinition =
-     RootOperationTypeDefinition
+    RootOperationTypeDefinition
         <$> operationType
         <* punctuator ':'
         <*> namedType
@@ -362,7 +362,7 @@ rootOperationTypeDefinition =
 -- | A GraphQL 'Description'
 -- https://spec.graphql.org/draft/#Description
 description :: Parser Token Description
-description =  do
+description = do
     TokenString stringValue <- nextToken
     pure $ Description stringValue
 
@@ -370,33 +370,33 @@ description =  do
 -- https://spec.graphql.org/draft/#TypeDefinition
 typeDefinition :: Parser Token TypeDefinition
 typeDefinition =
-     oneOf
-            [ DefinitionScalarType <$> scalarTypeDefinition
-            , DefinitionObjectType <$> objectTypeDefinition
-            , DefinitionInterfaceType <$> interfaceTypeDefinition
-            , DefinitionUnionType <$> unionTypeDefinition
-            , DefinitionEnumType <$> enumTypeDefinition
-            , DefinitionInputObjectType <$> inputObjectTypeDefinition
-            ]
+    oneOf
+        [ DefinitionScalarType <$> scalarTypeDefinition
+        , DefinitionObjectType <$> objectTypeDefinition
+        , DefinitionInterfaceType <$> interfaceTypeDefinition
+        , DefinitionUnionType <$> unionTypeDefinition
+        , DefinitionEnumType <$> enumTypeDefinition
+        , DefinitionInputObjectType <$> inputObjectTypeDefinition
+        ]
 
 -- | A GraphQL 'TypeExtension'
 -- https://spec.graphql.org/draft/#TypeExtension
 typeExtension :: Parser Token TypeExtension
 typeExtension =
-     oneOf
-            [ ExtensionScalarType <$> scalarTypeExtension
-            , ExtensionObjectType <$> objectTypeExtension
-            , ExtensionInterfaceType <$> interfaceTypeExtension
-            , ExtensionUnionType <$> unionTypeExtension
-            , ExtensionEnumType <$> enumTypeExtension
-            , ExtensionInputObjectType <$> inputObjectTypeExtension
-            ]
+    oneOf
+        [ ExtensionScalarType <$> scalarTypeExtension
+        , ExtensionObjectType <$> objectTypeExtension
+        , ExtensionInterfaceType <$> interfaceTypeExtension
+        , ExtensionUnionType <$> unionTypeExtension
+        , ExtensionEnumType <$> enumTypeExtension
+        , ExtensionInputObjectType <$> inputObjectTypeExtension
+        ]
 
 -- | A GraphQL 'ScalarTypeDefinition'
 -- https://spec.graphql.org/draft/#ScalarTypeDefinition
 scalarTypeDefinition :: Parser Token ScalarTypeDefinition
 scalarTypeDefinition =
-     ScalarTypeDefinition
+    ScalarTypeDefinition
         <$> optional description
         <* keyword "scalar"
         <*> name
@@ -406,7 +406,7 @@ scalarTypeDefinition =
 -- https://spec.graphql.org/draft/#ScalarTypeExtension
 scalarTypeExtension :: Parser Token ScalarTypeExtension
 scalarTypeExtension =
-     ScalarTypeExtension
+    ScalarTypeExtension
         <$ keyword "extend"
         <* keyword "scalar"
         <*> name
@@ -416,7 +416,7 @@ scalarTypeExtension =
 -- https://spec.graphql.org/draft/#ObjectTypeDefinition
 objectTypeDefinition :: Parser Token ObjectTypeDefinition
 objectTypeDefinition =
-     ObjectTypeDefinition
+    ObjectTypeDefinition
         <$> optional description
         <* keyword "type"
         <*> name
@@ -427,7 +427,7 @@ objectTypeDefinition =
 -- | A GraphQL 'ObjectTypeExtension'
 -- https://spec.graphql.org/draft/#ObjectTypeExtension
 objectTypeExtension :: Parser Token ObjectTypeExtension
-objectTypeExtension =  do
+objectTypeExtension = do
     keyword "extend"
     keyword "type"
     name <- name
@@ -444,7 +444,7 @@ objectTypeExtension =  do
 -- https://spec.graphql.org/draft/#ImplementsInterfaces
 implementsInterfaces :: Parser Token ImplementsInterfaces
 implementsInterfaces =
-     ImplementsInterfaces
+    ImplementsInterfaces
         <$ keyword "implements"
         <* optional (punctuator '&')
         <*> sepBy1' '&' namedType
@@ -453,7 +453,7 @@ implementsInterfaces =
 -- https://spec.graphql.org/draft/#FieldsDefinitionn
 fieldsDefinition :: Parser Token FieldsDefinition
 fieldsDefinition =
-     enclosed' '{' '}'
+    enclosed' '{' '}'
         $ FieldsDefinition
         <$> uniqueOn fieldDefinitionName (some1 fieldDefinition)
 
@@ -461,7 +461,7 @@ fieldsDefinition =
 -- https://spec.graphql.org/draft/#FieldDefinition
 fieldDefinition :: Parser Token FieldDefinition
 fieldDefinition =
-     FieldDefinition
+    FieldDefinition
         <$> optional description
         <*> name
         <*> optional argumentsDefinition
@@ -472,14 +472,14 @@ fieldDefinition =
 -- | https://spec.graphql.org/draft/#ArgumentsDefinition
 argumentsDefinition :: Parser Token ArgumentsDefinition
 argumentsDefinition =
-     enclosed' '(' ')'
+    enclosed' '(' ')'
         $ ArgumentsDefinition
         <$> uniqueOn inputValueDefinitionName (some1 inputValueDefinition)
 
 -- | https://spec.graphql.org/draft/#InputValueDefinition
 inputValueDefinition :: Parser Token InputValueDefinition
 inputValueDefinition =
-     InputValueDefinition
+    InputValueDefinition
         <$> optional description
         <*> name
         <* punctuator ':'
@@ -490,7 +490,7 @@ inputValueDefinition =
 -- | https://spec.graphql.org/draft/#InterfaceTypeDefinition
 interfaceTypeDefinition :: Parser Token InterfaceTypeDefinition
 interfaceTypeDefinition =
-     InterfaceTypeDefinition
+    InterfaceTypeDefinition
         <$> optional description
         <* keyword "interface"
         <*> name
@@ -500,7 +500,7 @@ interfaceTypeDefinition =
 
 -- | https://spec.graphql.org/draft/#InterfaceTypeExtension
 interfaceTypeExtension :: Parser Token InterfaceTypeExtension
-interfaceTypeExtension =  do
+interfaceTypeExtension = do
     keyword "extend"
     keyword "interface"
     name <- name
@@ -516,7 +516,7 @@ interfaceTypeExtension =  do
 -- | https://spec.graphql.org/draft/#UnionTypeDefinition
 unionTypeDefinition :: Parser Token UnionTypeDefinition
 unionTypeDefinition =
-     UnionTypeDefinition
+    UnionTypeDefinition
         <$> optional description
         <* keyword "union"
         <*> name
@@ -526,13 +526,13 @@ unionTypeDefinition =
 -- | https://spec.graphql.org/draft/#UnionMemberTypes
 unionMemberTypes :: Parser Token UnionMemberTypes
 unionMemberTypes =
-     UnionMemberTypes
+    UnionMemberTypes
         <$ optional (punctuator '|')
         <*> uniqueOn id (sepBy1' '|' namedType)
 
 -- | https://spec.graphql.org/draft/#UnionTypeExtension
 unionTypeExtension :: Parser Token UnionTypeExtension
-unionTypeExtension =  do
+unionTypeExtension = do
     keyword "extend"
     keyword "union"
     name <- name
@@ -545,7 +545,7 @@ unionTypeExtension =  do
 -- | https://spec.graphql.org/draft/#EnumTypeDefinition
 enumTypeDefinition :: Parser Token EnumTypeDefinition
 enumTypeDefinition =
-     EnumTypeDefinition
+    EnumTypeDefinition
         <$> optional description
         <* keyword "enum"
         <*> name
@@ -555,21 +555,21 @@ enumTypeDefinition =
 -- | https://spec.graphql.org/draft/#EnumValuesDefinition
 enumValuesDefinition :: Parser Token EnumValuesDefinition
 enumValuesDefinition =
-     enclosed' '{' '}'
+    enclosed' '{' '}'
         $ EnumValuesDefinition
         <$> uniqueOn enumValueDefinitionName (some1 enumValueDefinition)
 
 -- | https://spec.graphql.org/draft/#EnumValueDefinition
 enumValueDefinition :: Parser Token EnumValueDefinition
 enumValueDefinition =
-     EnumValueDefinition
+    EnumValueDefinition
         <$> optional description
         <*> enumValue
         <*> optional directives
 
 -- | https://spec.graphql.org/draft/#EnumTypeExtension
 enumTypeExtension :: Parser Token EnumTypeExtension
-enumTypeExtension =  do
+enumTypeExtension = do
     keyword "extend"
     keyword "enum"
     name <- name
@@ -585,7 +585,7 @@ enumTypeExtension =  do
 -- https://spec.graphql.org/draft/#InputObjectTypeDefinition
 inputObjectTypeDefinition :: Parser Token InputObjectTypeDefinition
 inputObjectTypeDefinition =
-     InputObjectTypeDefinition
+    InputObjectTypeDefinition
         <$> optional description
         <* keyword "input"
         <*> name
@@ -596,14 +596,14 @@ inputObjectTypeDefinition =
 -- https://spec.graphql.org/draft/#InputFieldsDefinition
 inputFieldsDefinition :: Parser Token InputFieldsDefinition
 inputFieldsDefinition =
-     enclosed' '{' '}'
+    enclosed' '{' '}'
         $ InputFieldsDefinition
         <$> uniqueOn inputValueDefinitionName (some1 inputValueDefinition)
 
 -- | InputObjectTypeExtension
 -- https://spec.graphql.org/draft/#InputObjectTypeExtension
 inputObjectTypeExtension :: Parser Token InputObjectTypeExtension
-inputObjectTypeExtension =  do
+inputObjectTypeExtension = do
     keyword "extend"
     keyword "input"
     name <- name
@@ -619,7 +619,7 @@ inputObjectTypeExtension =  do
 -- https://spec.graphql.org/draft/#DirectiveDefinition
 directiveDefinition :: Parser Token DirectiveDefinition
 directiveDefinition =
-     DirectiveDefinition
+    DirectiveDefinition
         <$> optional description
         <* keyword "directive"
         <* punctuator '@'
@@ -632,52 +632,52 @@ directiveDefinition =
 -- | https://spec.graphql.org/draft/#DirectiveLocations
 directiveLocations :: Parser Token DirectiveLocations
 directiveLocations =
-     optional (punctuator '|')
+    optional (punctuator '|')
         *> sepBy1' '|' directiveLocation
 
 -- | https://spec.graphql.org/draft/#DirectiveLocation
 directiveLocation :: Parser Token DirectiveLocation
 directiveLocation =
-     oneOf
-            [ LocationExecutableDirective <$> executableDirectiveLocation
-            , LocationTypeSystemDirective <$> typeSystemDirectiveLocation
-            ]
+    oneOf
+        [ LocationExecutableDirective <$> executableDirectiveLocation
+        , LocationTypeSystemDirective <$> typeSystemDirectiveLocation
+        ]
 
 -- | https://spec.graphql.org/draft/#ExecutableDirectiveLocation
 executableDirectiveLocation :: Parser Token ExecutableDirectiveLocation
 executableDirectiveLocation =
-     oneOf
-            [ QUERY <$ keyword "QUERY"
-            , MUTATION <$ keyword "MUTATION"
-            , SUBSCRIPTION <$ keyword "SUBSCRIPTION"
-            , FIELD <$ keyword "FIELD"
-            , FRAGMENT_DEFINITION <$ keyword "FRAGMENT_DEFINITION"
-            , FRAGMENT_SPREAD <$ keyword "FRAGMENT_SPREAD"
-            , INLINE_FRAGMENT <$ keyword "INLINE_FRAGMENT"
-            , VARIABLE_DEFINITION <$ keyword "VARIABLE_DEFINITION"
-            ]
+    oneOf
+        [ QUERY <$ keyword "QUERY"
+        , MUTATION <$ keyword "MUTATION"
+        , SUBSCRIPTION <$ keyword "SUBSCRIPTION"
+        , FIELD <$ keyword "FIELD"
+        , FRAGMENT_DEFINITION <$ keyword "FRAGMENT_DEFINITION"
+        , FRAGMENT_SPREAD <$ keyword "FRAGMENT_SPREAD"
+        , INLINE_FRAGMENT <$ keyword "INLINE_FRAGMENT"
+        , VARIABLE_DEFINITION <$ keyword "VARIABLE_DEFINITION"
+        ]
 
 -- | https://spec.graphql.org/draft/#TypeSystemDirectiveLocation
 typeSystemDirectiveLocation :: Parser Token TypeSystemDirectiveLocation
 typeSystemDirectiveLocation =
-     oneOf
-            [ SCHEMA <$ keyword "SCHEMA"
-            , SCALAR <$ keyword "SCALAR"
-            , OBJECT <$ keyword "OBJECT"
-            , FIELD_DEFINITION <$ keyword "FIELD_DEFINITION"
-            , ARGUMENT_DEFINITION <$ keyword "ARGUMENT_DEFINITION"
-            , INTERFACE <$ keyword "INTERFACE"
-            , UNION <$ keyword "UNION"
-            , ENUM <$ keyword "ENUM"
-            , ENUM_VALUE <$ keyword "ENUM_VALUE"
-            , INPUT_OBJECT <$ keyword "INPUT_OBJECT"
-            , INPUT_FIELD_DEFINITION <$ keyword "INPUT_FIELD_DEFINITION"
-            ]
+    oneOf
+        [ SCHEMA <$ keyword "SCHEMA"
+        , SCALAR <$ keyword "SCALAR"
+        , OBJECT <$ keyword "OBJECT"
+        , FIELD_DEFINITION <$ keyword "FIELD_DEFINITION"
+        , ARGUMENT_DEFINITION <$ keyword "ARGUMENT_DEFINITION"
+        , INTERFACE <$ keyword "INTERFACE"
+        , UNION <$ keyword "UNION"
+        , ENUM <$ keyword "ENUM"
+        , ENUM_VALUE <$ keyword "ENUM_VALUE"
+        , INPUT_OBJECT <$ keyword "INPUT_OBJECT"
+        , INPUT_FIELD_DEFINITION <$ keyword "INPUT_FIELD_DEFINITION"
+        ]
 
 -- | A GraphQL 'Name'
 -- https://spec.graphql.org/draft/#Name
 name :: Parser Token Name
-name =  do
+name = do
     TokenName name <- nextToken
     pure name
 
