@@ -4,48 +4,40 @@
 module Miso.GraphQL.JSON where
 
 import Control.Monad ((<=<))
-import Data.List.NonEmpty (NonEmpty (..))
 import GHC.Generics (Generic)
-import Miso.GraphQL.AST hiding (Value)
 import Miso.GraphQL.Printer ()
+import Miso.GraphQL.Selector
+import Miso.GraphQL.TH
 import Miso.JSON
 import Miso.Prelude hiding (Object)
+import Miso.String (FromMisoString, ToMisoString)
 
 newtype Request = Request {query :: MisoString}
     deriving stock (Generic)
     deriving anyclass (ToJSON)
-
-class Operation op where
-    type ReturnType op
-    toOperation :: op -> OperationDefinition
+    deriving newtype (FromMisoString, ToMisoString)
 
 execute
-    :: forall op error parent model action
-     . ( Operation op
-       , FromJSON (ReturnType op)
-       , FromJSVal error
-       )
-    => op
+    :: forall a b error parent model action
+     . (IsRootOperationType a, FromJSVal error)
+    => Selector a b
     -> MisoString
     -- ^ URL
     -> [(MisoString, MisoString)]
     -- ^ Headers
-    -> (Response (Result (ReturnType op)) -> action)
+    -> (Response (Result b) -> action)
     -- ^ successful callback
     -> (Response error -> action)
     -- ^ errorful callback
     -> Effect parent model action
-execute op url headers successful =
-    postJSON' url Request{query = toMisoString operation} headers \Response{..} ->
+execute selector url headers successful =
+    postJSON' url request headers \Response{..} ->
         successful
-            Response{body = either Error Success $ parseEither executionResult body, ..}
+            Response
+                { body = either Error Success $ parseEither executionResult body
+                , ..
+                }
   where
-    operation = toOperation op
-    (selection :| _) = operationSelectionSet operation
-    executionResult :: Value -> Parser (ReturnType op)
-    executionResult = withObject "ExecutionResult" $ data_ <=< (.: "data")
-    data_ :: Value -> Parser (ReturnType op)
-    data_ =
-        case selection of
-            SelectionField (Field _ (Name name) _ _ _) -> withObject "Data" $ parseJSON <=< (.: name)
-            _ -> parseJSON
+    request = Request . maybe "" toMisoString . toDocument $ selector
+    executionResult :: Value -> Parser b
+    executionResult = withObject "ExecutionResult" $ selectJSON selector <=< (.: "data")

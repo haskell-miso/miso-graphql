@@ -58,6 +58,7 @@ library
     base,
     containers,
     miso,
+    row-types,
     template-haskell,
 
   exposed-modules:
@@ -67,6 +68,7 @@ library
     Miso.GraphQL.Lexer
     Miso.GraphQL.Parser
     Miso.GraphQL.Printer
+    Miso.GraphQL.Selector
     Miso.GraphQL.TH
 
 test-suite miso-graphql-test

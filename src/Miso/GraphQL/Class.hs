@@ -1,16 +1,38 @@
 module Miso.GraphQL.Class where
 
+import Control.Monad ((<=<))
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
+import Data.Traversable
 import GHC.Float (float2Double)
 import Miso.GraphQL.AST
-import Miso.JSON (ToJSON (..))
+import Miso.GraphQL.Printer ()
+import Miso.JSON (FromJSON (..), Parser, ToJSON (..))
 import Miso.JSON qualified as JSON
-import Miso.Prelude
+import Miso.Prelude hiding (for)
 import Miso.String qualified as MisoString
+
+class FromGraphQL a where
+    parseGraphQL :: Value -> Parser a
+    default parseGraphQL :: (FromJSON a) => Value -> Parser a
+    parseGraphQL = parseJSON <=< parseGraphQL
+
+instance FromGraphQL JSON.Value where
+    parseGraphQL (ValueVariable variable) = pure . JSON.String . toMisoString $ variable
+    parseGraphQL (ValueInt i) = pure . JSON.Number . fromIntegral $ i
+    parseGraphQL (ValueFloat d) = pure . JSON.Number $ d
+    parseGraphQL (ValueString (BlockString s)) = pure . JSON.String $ s
+    parseGraphQL (ValueString (SingleLineString s)) = pure . JSON.String $ s
+    parseGraphQL (ValueBoolean b) = pure . JSON.Bool $ b
+    parseGraphQL ValueNull = pure JSON.Null
+    parseGraphQL (ValueEnum v) = pure . JSON.String . toMisoString $ v
+    parseGraphQL (ValueList vs) = JSON.Array <$> traverse parseGraphQL vs
+    parseGraphQL (ValueObject obj) =
+        JSON.Object . Map.fromList <$> for obj \(ObjectField name value) ->
+            (toMisoString name,) <$> parseGraphQL value
 
 class ToGraphQL v where
     toGraphQL :: v -> Value
