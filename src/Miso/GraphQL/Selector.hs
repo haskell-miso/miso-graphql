@@ -35,6 +35,12 @@ data Selector t a where
     Pure :: a -> Selector t a
     Map :: (a -> b) -> Selector t a -> Selector t b
     Ap :: Selector t (a -> b) -> Selector t a -> Selector t b
+    Alias
+        :: forall alias t a
+         . (KnownSymbol alias)
+        => SelectorProxy alias
+        -> Selector t a
+        -> Selector t a
     Field
         :: ( KnownSymbol fieldName
            , HasField fieldName t (FieldType r a)
@@ -87,10 +93,10 @@ instance Alternative (Selector t) where
     empty = Empty
     (<|>) = Alt
 
-instance Monoid a => Monoid (Selector t a) where
+instance (Monoid a) => Monoid (Selector t a) where
     mempty = pure mempty
 
-instance Semigroup a => Semigroup (Selector t a) where
+instance (Semigroup a) => Semigroup (Selector t a) where
     (<>) = liftA2 (<>)
 
 instance (name ~ fieldName) => IsLabel name (SelectorProxy fieldName) where
@@ -175,6 +181,14 @@ as
     -> Selector s a
 as = As Proxy
 
+alias
+    :: forall alias t a
+     . (KnownSymbol alias)
+    => SelectorProxy alias
+    -> Selector t a
+    -> Selector t a
+alias = Alias
+
 toArguments :: (Forall r ToGraphQL) => Rec r -> Maybe AST.Arguments
 toArguments =
     nonEmpty
@@ -185,6 +199,18 @@ toSelectionSet :: forall t a. Selector t a -> Maybe AST.SelectionSet
 toSelectionSet (Pure _) = Nothing
 toSelectionSet (Map _ inner) = toSelectionSet inner
 toSelectionSet (Ap selectorF selectorA) = toSelectionSet selectorF <> toSelectionSet selectorA
+toSelectionSet (Alias proxy selector) = fmap setAlias <$> toSelectionSet selector
+  where
+    setAlias :: AST.Selection -> AST.Selection
+    setAlias (AST.SelectionField (AST.Field _ name args directives selectionSet)) =
+        AST.SelectionField
+            $ AST.Field
+                (Just . AST.Alias . fromString . symbolVal $ proxy)
+                name
+                args
+                directives
+                selectionSet
+    setAlias x = x
 toSelectionSet (Field proxy args) =
     pure
         . pure
@@ -267,9 +293,31 @@ selectJSON :: Selector t a -> JSON.Value -> JSON.Parser a
 selectJSON (Pure x) = const $ pure x
 selectJSON (Map f s) = fmap f . selectJSON s
 selectJSON (Ap a b) = \v -> selectJSON a v <*> selectJSON b v
-selectJSON (Field (toMisoString -> name) _) = withObject name (.: name)
-selectJSON (Select (toMisoString -> name) _ s) = withObject name (selectJSON s <=< (.: name))
-selectJSON (SelectEach (toMisoString -> name) _ s) = withObject name (mapM (selectJSON s) <=< (.: name))
+selectJSON (Alias alias@(toMisoString -> name) s) =
+    case s of
+        Map f s -> selectJSON . Map f $ Alias alias s
+        Ap a b -> selectJSON $ Ap (Alias alias a) (Alias alias b)
+        Field _ _ -> selectJSONField name
+        Select _ _ s -> selectJSONObject name s
+        SelectEach _ _ s -> selectJSONEach name s
+        s -> selectJSON s
+selectJSON (Field (toMisoString -> name) _) = selectJSONField name
+selectJSON (Select (toMisoString -> name) _ s) = selectJSONObject name s
+selectJSON (SelectEach (toMisoString -> name) _ s) = selectJSONEach name s
 selectJSON (As _ s) = selectJSON s
 selectJSON Empty = const empty
 selectJSON (Alt a b) = \v -> selectJSON a v <|> selectJSON b v
+
+selectJSONField :: (FromJSON a) => MisoString -> JSON.Value -> JSON.Parser a
+selectJSONField name = withObject name (.: name)
+
+selectJSONObject :: MisoString -> Selector t a -> JSON.Value -> JSON.Parser a
+selectJSONObject name s = withObject name $ selectJSON s <=< (.: name)
+
+selectJSONEach
+    :: (Traversable f, FromJSON (f JSON.Value))
+    => MisoString
+    -> Selector t a
+    -> JSON.Value
+    -> JSON.Parser (f a)
+selectJSONEach name s = withObject name $ mapM (selectJSON s) <=< (.: name)
