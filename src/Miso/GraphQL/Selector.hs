@@ -87,6 +87,12 @@ instance Alternative (Selector t) where
     empty = Empty
     (<|>) = Alt
 
+instance Monoid a => Monoid (Selector t a) where
+    mempty = pure mempty
+
+instance Semigroup a => Semigroup (Selector t a) where
+    (<>) = liftA2 (<>)
+
 instance (name ~ fieldName) => IsLabel name (SelectorProxy fieldName) where
     fromLabel = SelectorProxy
 
