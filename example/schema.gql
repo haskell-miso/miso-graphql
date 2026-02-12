@@ -1,16 +1,20 @@
-type Person {
+interface Node {
+  id: ID!
+  name: String!
+}
+
+type Person implements Node {
   id: ID!
   name: String!
   groups: [Group!]!
 }
 
-type Group {
+type Group implements Node {
   id: ID!
   name: String!
-  people: [Person!]!
+  members: [Node!]!
 }
 
 type Query {
-  person(id: ID!): Person
-  group(id: ID!): Group
+  node(id: ID!): Node
 }

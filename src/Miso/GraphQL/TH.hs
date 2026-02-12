@@ -1,12 +1,21 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Miso.GraphQL.TH (IsRootOperationType (..), documentFile) where
+module Miso.GraphQL.TH
+    ( IsRootOperationType (..)
+    , NamedType (..)
+    , ImplementsInterface
+    , ID
+    , documentFile
+    )
+where
 
+import Data.Coerce (coerce)
 import Data.Foldable (for_, msum, toList)
 import Data.Foldable1 (foldrM1)
 import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.List qualified as List
+import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe
@@ -14,9 +23,11 @@ import Data.Maybe
     , isJust
     , listToMaybe
     , mapMaybe
+    , maybeToList
     )
 import Data.Row
 import GHC.Generics (Generic)
+import GHC.TypeLits (Symbol)
 import Language.Haskell.TH hiding (Name, Type)
 import Language.Haskell.TH qualified as TH hiding (Type)
 import Language.Haskell.TH.Syntax
@@ -24,7 +35,8 @@ import Language.Haskell.TH.Syntax
     , addModFinalizer
     , makeRelativeToProject
     )
-import Miso.GraphQL.AST hiding (rootOperationType)
+import Miso.GraphQL.AST hiding (NamedType, rootOperationType)
+import Miso.GraphQL.AST qualified as AST
 import Miso.GraphQL.Class (FromGraphQL, ToGraphQL (..))
 import Miso.GraphQL.Lexer qualified as Lexer
 import Miso.GraphQL.Parser qualified as Parser
@@ -34,6 +46,11 @@ import Miso.String (ToMisoString)
 
 class IsRootOperationType t where
     operationType :: OperationType
+
+class NamedType t where
+    type TypeName t :: Symbol
+
+class (NamedType t) => ImplementsInterface i t
 
 documentFile :: FilePath -> DecsQ
 documentFile f = do
@@ -158,7 +175,8 @@ document (Document definitions) =
                 DefinitionScalarType _ -> pure []
                 DefinitionObjectType typeDefinition ->
                     objectTypeDefinition typeDefinition (rootOperationType name)
-                DefinitionInterfaceType _ -> pure []
+                DefinitionInterfaceType typeDefinition ->
+                    interfaceTypeDefinition typeDefinition
                 DefinitionUnionType typeDefinition ->
                     unionTypeDefinition typeDefinition
                 DefinitionEnumType typeDefinition ->
@@ -189,7 +207,7 @@ document (Document definitions) =
             | DefinitionTypeSystem (DefinitionSchema (SchemaDefinition _ _ tds)) <-
                 toList definitions
             ]
-    rootOperationTypes :: [(OperationType, NamedType)]
+    rootOperationTypes :: [(OperationType, AST.NamedType)]
     rootOperationTypes = flip mapMaybe [minBound .. maxBound] \ot ->
         (ot,)
             <$> msum
@@ -199,7 +217,7 @@ document (Document definitions) =
                     , o == ot
                     ]
                 , let defaultName = Name . toMisoString $ show ot
-                   in NamedType defaultName <$ Map.lookup defaultName typeDefinitions
+                   in AST.NamedType defaultName <$ Map.lookup defaultName typeDefinitions
                 ]
     rootOperationType :: Name -> Maybe OperationType
     rootOperationType name =
@@ -219,12 +237,18 @@ mkName' :: (ToMisoString s) => s -> TH.Name
 mkName' = mkName . fromMisoString . toMisoString
 
 objectTypeDefinition :: ObjectTypeDefinition -> Maybe OperationType -> DecsQ
-objectTypeDefinition (ObjectTypeDefinition desc name _ _ fields) ot = do
+objectTypeDefinition (ObjectTypeDefinition desc name interfaces _ fields) ot = do
     for_ desc $ description name'
     sequence $ case length fields' of
         0 -> []
-        1 -> newtypeD (pure mempty) name' mempty Nothing con derivs : rootOperation
-        _ -> dataD (pure mempty) name' mempty Nothing [con] derivs : rootOperation
+        1 ->
+            newtypeD (pure mempty) name' mempty Nothing con derivs
+                : namedType
+                : rootOperation <> implementsInterfaces
+        _ ->
+            dataD (pure mempty) name' mempty Nothing [con] derivs
+                : namedType
+                : rootOperation <> implementsInterfaces
   where
     name' = mkName' name
     fields' = fields & concatMap \(FieldsDefinition xs) -> toList xs
@@ -247,20 +271,65 @@ objectTypeDefinition (ObjectTypeDefinition desc name _ _ fields) ot = do
               ]
             ]
     rootOperation :: [DecQ]
-    rootOperation
-        | Just ot <- ot =
+    rootOperation =
+        maybeToList ot <&> \ot ->
             let
                 otE = conE case ot of
                     Query -> 'Query
                     Mutation -> 'Mutation
                     Subscription -> 'Subscription
              in
-                pure
-                    $ instanceD
-                        mempty
-                        (conT ''IsRootOperationType `appT` conT name')
-                        [funD 'operationType . pure $ clause [] (normalB otE) []]
-        | otherwise = []
+                instanceD
+                    mempty
+                    (conT ''IsRootOperationType `appT` conT name')
+                    [funD 'operationType . pure $ clause [] (normalB otE) []]
+    namedType :: DecQ
+    namedType =
+        instanceD
+            mempty
+            (conT ''NamedType `appT` conT name')
+            [ tySynInstD
+                $ tySynEqn
+                    Nothing
+                    (conT ''TypeName `appT` conT name')
+                    (litT . strTyLit . fromMisoString . coerce $ name)
+            ]
+    implementsInterfaces :: [DecQ]
+    implementsInterfaces =
+        maybe [] (toList @NonEmpty . coerce) interfaces <&> \(AST.NamedType interfaceName) ->
+            instanceD
+                mempty
+                (conT ''ImplementsInterface `appT` conT (mkName' interfaceName) `appT` conT name')
+                []
+
+interfaceTypeDefinition :: InterfaceTypeDefinition -> DecsQ
+interfaceTypeDefinition (InterfaceTypeDefinition desc name _ _ fields) = do
+    for_ desc $ description name'
+    sequence $ case length fields' of
+        0 -> []
+        1 -> pure $ newtypeD (pure mempty) name' mempty Nothing con derivs
+        _ -> pure $ dataD (pure mempty) name' mempty Nothing [con] derivs
+  where
+    name' = mkName' name
+    fields' = fields & concatMap \(FieldsDefinition xs) -> toList xs
+    con :: ConQ
+    con =
+        recC name' $ fields' <&> \(FieldDefinition desc name args t _) -> do
+            let name' = mkName' name
+            for_ desc $ description name'
+            (name',defaultBang,) <$> typeWithArgs args t
+    hasArgs = flip any fields' \(FieldDefinition _ _ args _ _) -> isJust args
+    derivs :: [DerivClauseQ]
+    derivs =
+        mconcat
+            [ pure $ derivClause (Just StockStrategy) [conT ''Generic]
+            , [derivClause (Just StockStrategy) [conT ''Eq] | not hasArgs]
+            , [ derivClause
+                    (Just AnyclassStrategy)
+                    [conT ''FromJSON, conT ''ToJSON, conT ''FromGraphQL, conT ''ToGraphQL]
+              | not hasArgs
+              ]
+            ]
 
 unionTypeDefinition :: UnionTypeDefinition -> DecsQ
 unionTypeDefinition (UnionTypeDefinition desc name _ members) = do
@@ -274,7 +343,7 @@ unionTypeDefinition (UnionTypeDefinition desc name _ members) = do
     members' = members & concatMap \(UnionMemberTypes xs) -> toList xs
     cons :: [ConQ]
     cons =
-        members' <&> \nt@(NamedType memberName) -> do
+        members' <&> \nt@(AST.NamedType memberName) -> do
             let memberName' = mkName' $ name <> memberName
             normalC memberName' . pure $ (defaultBang,) <$> namedType nt
     derivs :: [DerivClauseQ]
@@ -328,13 +397,13 @@ defaultBang = Bang NoSourceUnpackedness NoSourceStrictness
 
 type ID = MisoString
 
-namedType :: NamedType -> TypeQ
-namedType (NamedType (Name "Int")) = conT ''Int
-namedType (NamedType (Name "Float")) = conT ''Double
-namedType (NamedType (Name "String")) = conT ''MisoString
-namedType (NamedType (Name "Boolean")) = conT ''Bool
-namedType (NamedType (Name "ID")) = conT ''ID
-namedType (NamedType name) = conT $ mkName' name
+namedType :: AST.NamedType -> TypeQ
+namedType (AST.NamedType (Name "Int")) = conT ''Int
+namedType (AST.NamedType (Name "Float")) = conT ''Double
+namedType (AST.NamedType (Name "String")) = conT ''MisoString
+namedType (AST.NamedType (Name "Boolean")) = conT ''Bool
+namedType (AST.NamedType (Name "ID")) = conT ''ID
+namedType (AST.NamedType name) = conT $ mkName' name
 
 listType :: ListType -> TypeQ
 listType (ListType t) = listT `appT` type' t

@@ -3,8 +3,8 @@
 module Main where
 
 import Control.Monad (join)
-import Data.IntMap (IntMap)
-import Data.IntMap qualified as IntMap
+import Data.Maybe (maybeToList)
+import GHC.Records (HasField)
 import Language.Haskell.TH.Syntax (makeRelativeToProject)
 import Miso.GraphQL.Selector
 import Miso.GraphQL.TH
@@ -12,16 +12,25 @@ import Miso.Prelude hiding (select)
 
 documentFile =<< makeRelativeToProject "example/schema.gql"
 
-peopleInSharedGroups :: Int -> Selector Query (IntMap MisoString)
+selectNode
+    :: ( HasField "id" a ID
+       , HasField "name" a MisoString
+       )
+    => Selector a Node
+selectNode = do
+    id <- field' #id
+    name <- field' #name
+    pure Node{..}
+
+peopleInSharedGroups :: Int -> Selector Query [Node]
 peopleInSharedGroups personId =
-    fmap (IntMap.fromList . maybe [] join)
-        . selectEach #person (#id .== toMisoString personId)
+    fmap (join . join . maybeToList)
+        . selectEach #node (#id .== toMisoString personId)
+        . as @Person
         . selectEach' #groups
-        . selectEach' #people
-        $ do
-            id' <- field' #id
-            name <- field' #name
-            pure (fromMisoString @Int id', name)
+        . selectEach' #members
+        . as @Person
+        $ selectNode
 
 main :: IO ()
 main =

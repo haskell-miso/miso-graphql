@@ -1,8 +1,10 @@
 module Miso.GraphQL.Selector (module Miso.GraphQL.Selector, module Data.Row) where
 
 import Control.Monad ((<=<))
+import Data.Functor ((<&>))
 import Data.Kind (Type)
 import Data.List.NonEmpty (nonEmpty)
+import Data.Proxy (Proxy (..))
 import Data.Row
 import Data.Row.Records (eraseWithLabels)
 import Data.String (IsString (fromString))
@@ -11,7 +13,11 @@ import GHC.Records
 import GHC.TypeLits
 import Miso.GraphQL.AST qualified as AST
 import Miso.GraphQL.Class (ToGraphQL (..))
-import Miso.GraphQL.TH (IsRootOperationType (..))
+import Miso.GraphQL.TH
+    ( ImplementsInterface
+    , IsRootOperationType (..)
+    , NamedType (..)
+    )
 import Miso.JSON (FromJSON, withObject, (.:))
 import Miso.JSON qualified as JSON
 import Miso.Prelude hiding (select)
@@ -57,6 +63,14 @@ data Selector t a where
         -> Rec r
         -> Selector t a
         -> Selector s (f a)
+    As
+        :: ( ImplementsInterface s t
+           , KnownSymbol (TypeName t)
+           , FromJSON a
+           )
+        => Proxy t
+        -> Selector t a
+        -> Selector s a
 
 instance Functor (Selector t) where
     fmap = Map
@@ -78,7 +92,8 @@ field
        , FromJSON a
        )
     => SelectorProxy fieldName
-    -> Rec r -> Selector t a
+    -> Rec r
+    -> Selector t a
 field = Field
 
 select
@@ -136,13 +151,23 @@ selectEach'
     -> Selector s (f a)
 selectEach' = flip selectEach empty
 
+as
+    :: forall t s a
+     . ( ImplementsInterface s t
+       , KnownSymbol (TypeName t)
+       , FromJSON a
+       )
+    => Selector t a
+    -> Selector s a
+as = As Proxy
+
 toArguments :: (Forall r ToGraphQL) => Rec r -> Maybe AST.Arguments
 toArguments =
     nonEmpty
         . fmap (uncurry AST.Argument)
         . eraseWithLabels @ToGraphQL toGraphQL
 
-toSelectionSet :: Selector t a -> Maybe AST.SelectionSet
+toSelectionSet :: forall t a. Selector t a -> Maybe AST.SelectionSet
 toSelectionSet (Pure _) = Nothing
 toSelectionSet (Map _ inner) = toSelectionSet inner
 toSelectionSet (Ap selectorF selectorA) = toSelectionSet selectorF <> toSelectionSet selectorA
@@ -176,6 +201,23 @@ toSelectionSet (SelectEach proxy args inner) =
             (toArguments args)
             Nothing
             (toSelectionSet inner)
+toSelectionSet (As proxy inner) =
+    toSelectionSet inner
+        <&> pure
+            . AST.SelectionInlineFragment
+            . AST.InlineFragment
+                ( Just
+                    . AST.TypeCondition
+                    . AST.NamedType
+                    . fromString
+                    . symbolVal
+                    . asName
+                    $ proxy
+                )
+                Nothing
+  where
+    asName :: forall t. Proxy t -> Proxy (TypeName t)
+    asName _ = Proxy
 
 toOperationDefinition
     :: forall a b
@@ -212,3 +254,4 @@ selectJSON (Ap a b) = \v -> selectJSON a v <*> selectJSON b v
 selectJSON (Field (toMisoString -> name) _) = withObject name (.: name)
 selectJSON (Select (toMisoString -> name) _ s) = withObject name (selectJSON s <=< (.: name))
 selectJSON (SelectEach (toMisoString -> name) _ s) = withObject name (mapM (selectJSON s) <=< (.: name))
+selectJSON (As _ s) = selectJSON s
