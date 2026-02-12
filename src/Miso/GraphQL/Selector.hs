@@ -1,11 +1,13 @@
 module Miso.GraphQL.Selector (module Miso.GraphQL.Selector, module Data.Row) where
 
+import Control.Applicative (Alternative (..))
 import Control.Monad ((<=<))
 import Data.Functor ((<&>))
 import Data.Kind (Type)
 import Data.List.NonEmpty (nonEmpty)
 import Data.Proxy (Proxy (..))
-import Data.Row
+import Data.Row hiding (empty)
+import Data.Row qualified as Row
 import Data.Row.Records (eraseWithLabels)
 import Data.String (IsString (fromString))
 import GHC.OverloadedLabels
@@ -71,6 +73,8 @@ data Selector t a where
         => Proxy t
         -> Selector t a
         -> Selector s a
+    Empty :: Selector t a
+    Alt :: Selector t a -> Selector t a -> Selector t a
 
 instance Functor (Selector t) where
     fmap = Map
@@ -78,6 +82,10 @@ instance Functor (Selector t) where
 instance Applicative (Selector t) where
     pure = Pure
     (<*>) = Ap
+
+instance Alternative (Selector t) where
+    empty = Empty
+    (<|>) = Alt
 
 instance (name ~ fieldName) => IsLabel name (SelectorProxy fieldName) where
     fromLabel = SelectorProxy
@@ -128,7 +136,7 @@ field'
        )
     => SelectorProxy fieldName
     -> Selector t a
-field' = flip field empty
+field' = flip field Row.empty
 
 select'
     :: ( KnownSymbol fieldName
@@ -138,7 +146,7 @@ select'
     => SelectorProxy fieldName
     -> Selector t a
     -> Selector s a
-select' = flip select empty
+select' = flip select Row.empty
 
 selectEach'
     :: ( KnownSymbol fieldName
@@ -149,7 +157,7 @@ selectEach'
     => SelectorProxy fieldName
     -> Selector t a
     -> Selector s (f a)
-selectEach' = flip selectEach empty
+selectEach' = flip selectEach Row.empty
 
 as
     :: forall t s a
@@ -218,6 +226,8 @@ toSelectionSet (As proxy inner) =
   where
     asName :: forall t. Proxy t -> Proxy (TypeName t)
     asName _ = Proxy
+toSelectionSet Empty = Nothing
+toSelectionSet (Alt a b) = toSelectionSet a <> toSelectionSet b
 
 toOperationDefinition
     :: forall a b
@@ -255,3 +265,5 @@ selectJSON (Field (toMisoString -> name) _) = withObject name (.: name)
 selectJSON (Select (toMisoString -> name) _ s) = withObject name (selectJSON s <=< (.: name))
 selectJSON (SelectEach (toMisoString -> name) _ s) = withObject name (mapM (selectJSON s) <=< (.: name))
 selectJSON (As _ s) = selectJSON s
+selectJSON Empty = const empty
+selectJSON (Alt a b) = \v -> selectJSON a v <|> selectJSON b v

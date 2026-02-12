@@ -2,8 +2,9 @@
 
 module Main where
 
+import Control.Applicative (Alternative ((<|>)), optional)
 import Control.Monad (join)
-import Data.Maybe (maybeToList)
+import Data.Maybe (catMaybes, maybeToList)
 import GHC.Records (HasField)
 import Language.Haskell.TH.Syntax (makeRelativeToProject)
 import Miso.GraphQL.Selector
@@ -22,18 +23,20 @@ selectNode = do
     name <- field' #name
     pure Node{..}
 
-peopleInSharedGroups :: Int -> Selector Query [Node]
-peopleInSharedGroups personId =
-    fmap (join . join . maybeToList)
-        . selectEach #node (#id .== toMisoString personId)
-        . as @Person
-        . selectEach' #groups
-        . selectEach' #members
-        . as @Person
-        $ selectNode
+people :: Int -> Selector Query [Node]
+people nodeId =
+    fmap (join . maybeToList)
+        . selectEach #node (#id .== toMisoString nodeId)
+        $ (pure <$> person)
+        <|> group
+  where
+    person :: Selector Node Node
+    person = as @Person selectNode
+    group :: Selector Node [Node]
+    group = fmap catMaybes . as @Group . selectEach' #members $ optional person
 
 main :: IO ()
 main =
     mapM_
         (putStrLn . fromMisoString . toMisoString)
-        (toDocument $ peopleInSharedGroups 17)
+        (toDocument $ people 17)
