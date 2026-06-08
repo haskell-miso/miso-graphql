@@ -322,6 +322,19 @@ data TypeDefinition
     | DefinitionInputObjectType InputObjectTypeDefinition
     deriving stock (Show, Eq, Generic)
 
+typeDefinitionName :: TypeDefinition -> Name
+typeDefinitionName (DefinitionScalarType (ScalarTypeDefinition _ name _)) = name
+typeDefinitionName (DefinitionObjectType (ObjectTypeDefinition _ name _ _ _)) = name
+typeDefinitionName (DefinitionInterfaceType (InterfaceTypeDefinition _ name _ _ _)) = name
+typeDefinitionName (DefinitionUnionType (UnionTypeDefinition _ name _ _)) = name
+typeDefinitionName (DefinitionEnumType (EnumTypeDefinition _ name _ _)) = name
+typeDefinitionName (DefinitionInputObjectType (InputObjectTypeDefinition _ name _ _)) = name
+
+typeDefinitionFields :: TypeDefinition -> Maybe FieldsDefinition
+typeDefinitionFields (DefinitionObjectType (ObjectTypeDefinition _ _ _ _ fields)) = fields
+typeDefinitionFields (DefinitionInterfaceType (InterfaceTypeDefinition _ _ _ _ fields)) = fields
+typeDefinitionFields _ = Nothing
+
 -- | A GraphQL 'TypeExtension'
 -- https://spec.graphql.org/draft/#TypeExtension
 data TypeExtension
@@ -332,6 +345,14 @@ data TypeExtension
     | ExtensionEnumType EnumTypeExtension
     | ExtensionInputObjectType InputObjectTypeExtension
     deriving stock (Show, Eq, Generic)
+
+typeExtensionName :: TypeExtension -> Name
+typeExtensionName (ExtensionScalarType (ScalarTypeExtension name _)) = name
+typeExtensionName (ExtensionObjectType (ObjectTypeExtension name _ _ _)) = name
+typeExtensionName (ExtensionInterfaceType (InterfaceTypeExtension name _ _ _)) = name
+typeExtensionName (ExtensionUnionType (UnionTypeExtension name _ _)) = name
+typeExtensionName (ExtensionEnumType (EnumTypeExtension name _ _)) = name
+typeExtensionName (ExtensionInputObjectType (InputObjectTypeExtension name _ _)) = name
 
 -- | A GraphQL 'ScalarTypeDefinition'
 -- https://spec.graphql.org/draft/#ScalarTypeDefinition

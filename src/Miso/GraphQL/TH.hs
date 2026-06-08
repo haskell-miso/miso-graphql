@@ -65,22 +65,6 @@ documentString =
         . Parser.parse' Lexer.tokens Parser.document
         . toMisoString
 
-typeDefinitionName :: TypeDefinition -> Name
-typeDefinitionName (DefinitionScalarType (ScalarTypeDefinition _ name _)) = name
-typeDefinitionName (DefinitionObjectType (ObjectTypeDefinition _ name _ _ _)) = name
-typeDefinitionName (DefinitionInterfaceType (InterfaceTypeDefinition _ name _ _ _)) = name
-typeDefinitionName (DefinitionUnionType (UnionTypeDefinition _ name _ _)) = name
-typeDefinitionName (DefinitionEnumType (EnumTypeDefinition _ name _ _)) = name
-typeDefinitionName (DefinitionInputObjectType (InputObjectTypeDefinition _ name _ _)) = name
-
-typeExtensionName :: TypeExtension -> Name
-typeExtensionName (ExtensionScalarType (ScalarTypeExtension name _)) = name
-typeExtensionName (ExtensionObjectType (ObjectTypeExtension name _ _ _)) = name
-typeExtensionName (ExtensionInterfaceType (InterfaceTypeExtension name _ _ _)) = name
-typeExtensionName (ExtensionUnionType (UnionTypeExtension name _ _)) = name
-typeExtensionName (ExtensionEnumType (EnumTypeExtension name _ _)) = name
-typeExtensionName (ExtensionInputObjectType (InputObjectTypeExtension name _ _)) = name
-
 applyExtension :: TypeExtension -> TypeDefinition -> TypeDefinition
 applyExtension
     (ExtensionScalarType (ScalarTypeExtension name' directives'))
@@ -177,9 +161,9 @@ document (Document definitions) =
             case typeDefinition of
                 DefinitionScalarType _ -> pure []
                 DefinitionObjectType typeDefinition ->
-                    objectTypeDefinition typeDefinition (rootOperationType name)
+                    objectTypeDefinition typeDefinitions typeDefinition (rootOperationType name)
                 DefinitionInterfaceType typeDefinition ->
-                    interfaceTypeDefinition typeDefinition
+                    interfaceTypeDefinition typeDefinitions typeDefinition
                 DefinitionUnionType typeDefinition ->
                     unionTypeDefinition typeDefinition
                 DefinitionEnumType typeDefinition ->
@@ -239,8 +223,21 @@ description name =
 mkName' :: (ToMisoString s) => s -> TH.Name
 mkName' = mkName . fromMisoString . toMisoString
 
-objectTypeDefinition :: ObjectTypeDefinition -> Maybe OperationType -> DecsQ
-objectTypeDefinition (ObjectTypeDefinition desc name interfaces _ fields) ot = do
+-- | Recursively checks if any field of this type or descendants has args
+typeDefinitionHasArgs :: Map Name TypeDefinition -> TypeDefinition -> Bool
+typeDefinitionHasArgs typeDefinitions typeDef = hasArgs || descendentHasArgs
+  where
+    typeDefinitions' = typeDefinitions & Map.delete (typeDefinitionName typeDef)
+    fields = typeDefinitionFields typeDef
+    fields' = fields & concatMap \(FieldsDefinition xs) -> toList xs
+    hasArgs = fields' & any \(FieldDefinition _ _ args _ _) -> isJust args
+    fieldTypes =
+        fields' & mapMaybe \(FieldDefinition _ _ _ type' _) -> typeDefinitions' Map.!? (typeName type')
+    descendentHasArgs = fieldTypes & any (typeDefinitionHasArgs typeDefinitions')
+
+objectTypeDefinition
+    :: Map Name TypeDefinition -> ObjectTypeDefinition -> Maybe OperationType -> DecsQ
+objectTypeDefinition typeDefinitions td@(ObjectTypeDefinition desc name interfaces _ fields) ot = do
     for_ desc $ description name'
     sequence $ case length fields' of
         0 -> []
@@ -261,7 +258,7 @@ objectTypeDefinition (ObjectTypeDefinition desc name interfaces _ fields) ot = d
             let name' = mkName' name
             for_ desc $ description name'
             (name',defaultBang,) <$> typeWithArgs args t
-    hasArgs = flip any fields' \(FieldDefinition _ _ args _ _) -> isJust args
+    hasArgs = typeDefinitionHasArgs typeDefinitions (DefinitionObjectType td)
     derivs :: [DerivClauseQ]
     derivs =
         mconcat
@@ -305,8 +302,9 @@ objectTypeDefinition (ObjectTypeDefinition desc name interfaces _ fields) ot = d
                 (conT ''ImplementsInterface `appT` conT (mkName' interfaceName) `appT` conT name')
                 []
 
-interfaceTypeDefinition :: InterfaceTypeDefinition -> DecsQ
-interfaceTypeDefinition (InterfaceTypeDefinition desc name _ _ fields) = do
+interfaceTypeDefinition
+    :: Map Name TypeDefinition -> InterfaceTypeDefinition -> DecsQ
+interfaceTypeDefinition typeDefinitions td@(InterfaceTypeDefinition desc name _ _ fields) = do
     for_ desc $ description name'
     sequence $ case length fields' of
         0 -> []
@@ -321,7 +319,7 @@ interfaceTypeDefinition (InterfaceTypeDefinition desc name _ _ fields) = do
             let name' = mkName' name
             for_ desc $ description name'
             (name',defaultBang,) <$> typeWithArgs args t
-    hasArgs = flip any fields' \(FieldDefinition _ _ args _ _) -> isJust args
+    hasArgs = typeDefinitionHasArgs typeDefinitions (DefinitionInterfaceType td)
     derivs :: [DerivClauseQ]
     derivs =
         mconcat
@@ -383,8 +381,8 @@ inputObjectTypeDefinition (InputObjectTypeDefinition desc name _ fields) = do
     for_ desc $ description name'
     case length fields' of
         0 -> pure []
-        1 -> pure <$> newtypeD (pure mempty) name' mempty Nothing con mempty
-        _ -> pure <$> dataD (pure mempty) name' mempty Nothing [con] mempty
+        1 -> pure <$> newtypeD (pure mempty) name' mempty Nothing con derivs
+        _ -> pure <$> dataD (pure mempty) name' mempty Nothing [con] derivs
   where
     name' = mkName' name
     fields' = fields & concatMap \(InputFieldsDefinition xs) -> toList xs
@@ -394,6 +392,13 @@ inputObjectTypeDefinition (InputObjectTypeDefinition desc name _ fields) = do
             let name' = mkName' name
             for_ desc $ description name'
             (name',defaultBang,) <$> type' t
+    derivs :: [DerivClauseQ]
+    derivs =
+        [ derivClause (Just StockStrategy) [conT ''Generic, conT ''Eq]
+        , derivClause
+            (Just AnyclassStrategy)
+            [conT ''FromJSON, conT ''ToJSON, conT ''FromGraphQL, conT ''ToGraphQL]
+        ]
 
 defaultBang :: Bang
 defaultBang = Bang NoSourceUnpackedness NoSourceStrictness
